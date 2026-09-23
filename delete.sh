@@ -77,11 +77,13 @@ if os.path.isfile(pkg_file) and os.path.isfile(pkg_gz_file):
 
     now_rfc = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S UTC")
     release_content = (
-        "Archive: stable\n"
-        "Component: main\n"
         "Origin: SujitKumarBharti Repo\n"
         "Label: SujitKumarBharti Universal Linux Repository\n"
-        "Architecture: amd64 arm64 all\n"
+        "Suite: stable\n"
+        "Codename: stable\n"
+        "Version: 1.0\n"
+        "Components: main\n"
+        "Architectures: amd64 arm64 all\n"
         "Date: {}\n"
         "MD5Sum:\n"
         " {} {} Packages\n"

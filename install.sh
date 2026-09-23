@@ -36,9 +36,21 @@ fi
 
 # Detect Linux Distribution
 DISTRO="Linux"
+DISTRO_FAMILY="unknown"
 if [ -f /etc/os-release ]; then
     . /etc/os-release
     DISTRO="${NAME:-$ID}"
+    case "$ID" in
+        ubuntu|debian|kali|linuxmint|pop|elementary|raspbian)
+            DISTRO_FAMILY="debian"
+            ;;
+        fedora|rhel|centos|rocky|almalinux)
+            DISTRO_FAMILY="fedora"
+            ;;
+        arch|manjaro|endeavouros)
+            DISTRO_FAMILY="arch"
+            ;;
+    esac
 fi
 echo -e "${BLUE}🐧 Detected Linux System: ${GREEN}${BOLD}$DISTRO${NC}"
 
@@ -66,8 +78,7 @@ if [ ${#MISSING_TOOLS[@]} -gt 0 ]; then
 fi
 
 # Download urepo CLI
-echo -e "${BLUE}📥 Installing universal repository manager CLI ('urepo')...${NC}"
-TARGET_BIN="/usr/local/bin/urepo"
+echo -e "${BLUE}📥 Installing universal repository manager CLI ('urepo' and 'repo')...${NC}"
 TEMP_BIN=$(mktemp)
 
 DOWNLOAD_SUCCESS=false
@@ -84,15 +95,19 @@ if [ "$DOWNLOAD_SUCCESS" != "true" ]; then
     exit 1
 fi
 
-mv "$TEMP_BIN" "$TARGET_BIN"
-chmod 755 "$TARGET_BIN"
+# Install to BOTH /usr/local/bin and /usr/bin to guarantee sudo PATH availability
+cp "$TEMP_BIN" /usr/local/bin/urepo
+chmod 755 /usr/local/bin/urepo
+ln -sf /usr/local/bin/urepo /usr/local/bin/repo
 
-# Optional symlink 'repo' if free
-if [ ! -e /usr/local/bin/repo ]; then
-    ln -s /usr/local/bin/urepo /usr/local/bin/repo
+if [ -d /usr/bin ]; then
+    cp "$TEMP_BIN" /usr/bin/urepo
+    chmod 755 /usr/bin/urepo
+    ln -sf /usr/bin/urepo /usr/bin/repo
 fi
+rm -f "$TEMP_BIN"
 
-# Initialize cache
+# Initialize urepo cache
 mkdir -p /var/lib/urepo
 chmod 755 /var/lib/urepo
 
@@ -107,18 +122,40 @@ else
     echo -e "${YELLOW}⚠️  Could not pre-cache registry now. It will be fetched automatically on first use.${NC}"
 fi
 
+# Configure Native Package Manager Repositories
+if [ "$DISTRO_FAMILY" == "debian" ] || [ -d /etc/apt/sources.list.d ]; then
+    echo -e "${BLUE}⚙️  Configuring native APT repository (/etc/apt/sources.list.d/skb-repo.list)...${NC}"
+    echo "deb [trusted=yes] https://sujitkumarbharti.github.io/repo/database/debian ./" > /etc/apt/sources.list.d/skb-repo.list
+    echo -e "${BLUE}🔄 Updating apt package lists...${NC}"
+    apt-get update -y || true
+elif [ "$DISTRO_FAMILY" == "fedora" ] || [ -d /etc/yum.repos.d ]; then
+    echo -e "${BLUE}⚙️  Configuring native DNF/YUM repository (/etc/yum.repos.d/skb-repo.repo)...${NC}"
+    cat << 'EOF' > /etc/yum.repos.d/skb-repo.repo
+[skb-repo]
+name=SujitKumarBharti Universal Linux Repository
+baseurl=https://sujitkumarbharti.github.io/repo/database/fedora
+enabled=1
+gpgcheck=0
+EOF
+fi
+
 echo ""
 echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${NC}"
 echo -e "${GREEN}${BOLD}🎉 REPOSITORY ADDED SUCCESSFULLY!${NC}"
 echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${NC}"
 echo ""
-echo -e "${BOLD}You can now manage and install packages using '${CYAN}urepo${NC}${BOLD}' or '${CYAN}repo${NC}${BOLD}':${NC}"
+echo -e "${BOLD}Aap 2 tariko se packages install kar sakte hain:${NC}"
 echo ""
-echo -e "  • ${CYAN}urepo list${NC}                     View all available packages"
-echo -e "  • ${CYAN}urepo search <term>${NC}            Search packages"
-echo -e "  • ${CYAN}sudo urepo install <name>${NC}      Install package (e.g., sudo urepo install omen-gaming-hub)"
-echo -e "  • ${CYAN}sudo urepo remove <name>${NC}       Uninstall package"
-echo -e "  • ${CYAN}urepo update${NC}                   Refresh repository catalog"
+echo -e "${CYAN}${BOLD}Option 1: Native APT se direct install karein:${NC}"
+echo -e "  • ${GREEN}sudo apt update${NC}"
+echo -e "  • ${GREEN}sudo apt search omengaminghub${NC}"
+echo -e "  • ${GREEN}sudo apt install omengaminghub${NC}"
+echo ""
+echo -e "${CYAN}${BOLD}Option 2: Universal CLI (urepo / repo) se:${NC}"
+echo -e "  • ${GREEN}urepo list${NC}                     View all available packages"
+echo -e "  • ${GREEN}urepo search <term>${NC}            Search packages"
+echo -e "  • ${GREEN}sudo urepo install <name>${NC}      Install package (e.g., sudo urepo install omengaminghub)"
+echo -e "  • ${GREEN}sudo urepo remove <name>${NC}       Uninstall package"
 echo ""
 echo -e "${PURPLE}Enjoy using SujitKumarBharti Universal Linux Repository! 🚀${NC}"
 echo ""

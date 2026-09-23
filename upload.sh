@@ -154,10 +154,60 @@ with open(reg_file, "w") as f:
 print("Successfully removed \"{}\" from registry.".format(pkg_name))
 ' "$REGISTRY_FILE" "$SCRIPT_DIR" "$pkg_name"
 
+    update_apt_repo
+
     echo -e "${GREEN}✅ Deletion complete. Remember to commit and push:${NC}"
     echo "   git add ."
     echo "   git commit -m \"chore: removed $pkg_name\""
     echo "   git push"
+}
+
+# Update native APT repository indexes for Debian/Ubuntu/Kali
+update_apt_repo() {
+    local deb_dir="$DATABASE_DIR/debian"
+    if [ ! -d "$deb_dir" ]; then return 0; fi
+
+    echo -e "${BLUE}📦 Updating APT repository indexes (Packages, Packages.gz, Release)...${NC}"
+    python3 -c '
+import os, hashlib, datetime, sys
+
+deb_dir = sys.argv[1]
+has_dpkg = os.system("which dpkg-scanpackages >/dev/null 2>&1") == 0
+
+if has_dpkg:
+    os.system("cd {} && dpkg-scanpackages . /dev/null > Packages 2>/dev/null && gzip -k -f Packages".format(deb_dir))
+
+pkg_file = os.path.join(deb_dir, "Packages")
+pkg_gz_file = os.path.join(deb_dir, "Packages.gz")
+
+if os.path.isfile(pkg_file) and os.path.isfile(pkg_gz_file):
+    def get_hashes(filepath):
+        with open(filepath, "rb") as f:
+            data = f.read()
+        return len(data), hashlib.md5(data).hexdigest(), hashlib.sha256(data).hexdigest()
+
+    pkg_size, pkg_md5, pkg_sha256 = get_hashes(pkg_file)
+    gz_size, gz_md5, gz_sha256 = get_hashes(pkg_gz_file)
+
+    now_rfc = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S UTC")
+    release_content = (
+        "Archive: stable\n"
+        "Component: main\n"
+        "Origin: SujitKumarBharti Repo\n"
+        "Label: SujitKumarBharti Universal Linux Repository\n"
+        "Architecture: amd64 arm64 all\n"
+        "Date: {}\n"
+        "MD5Sum:\n"
+        " {} {} Packages\n"
+        " {} {} Packages.gz\n"
+        "SHA256:\n"
+        " {} {} Packages\n"
+        " {} {} Packages.gz\n"
+    ).format(now_rfc, pkg_md5, pkg_size, gz_md5, gz_size, pkg_sha256, pkg_size, gz_sha256, gz_size)
+
+    with open(os.path.join(deb_dir, "Release"), "w") as f:
+        f.write(release_content)
+' "$deb_dir"
 }
 
 # Core package process function
@@ -284,6 +334,9 @@ with open(reg_file, "w") as f:
     json.dump(data, f, indent=2)
 ' "$REGISTRY_FILE" "$pkg_name" "$pkg_version" "$os_type" "$dest_filename" "$rel_path" "$sha256" "$pkg_desc"
 
+    if [ "$os_type" == "debian" ]; then
+        update_apt_repo
+    fi
     echo ""
     echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${NC}"
     echo -e "${GREEN}${BOLD}🎉 SUCCESS! Package rolled out and indexed in database:${NC}"

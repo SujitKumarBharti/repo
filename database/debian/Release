@@ -1,0 +1,12 @@
+Archive: stable
+Component: main
+Origin: SujitKumarBharti Repo
+Label: SujitKumarBharti Universal Linux Repository
+Architecture: amd64 arm64 all
+Date: Wed, 23 Sep 2026 19:46:08 UTC
+MD5Sum:
+ 440a4ef69a633f58967a0d75ba4f6e97 549 Packages
+ 24d43c1c4494c411f4c019cbc4177fb7 413 Packages.gz
+SHA256:
+ 9b0836dbac26e62b0d6d6335cb0f9ce696acb2b8d8af1933a1b9436d990187e5 549 Packages
+ 8cf57822e1e797451919ca25a7eb836eda677fe93a52ccc5b0fa2a5defb7cfab 413 Packages.gz

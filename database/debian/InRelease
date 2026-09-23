@@ -6,17 +6,17 @@ Component: main
 Origin: SujitKumarBharti Repo
 Label: SujitKumarBharti Universal Linux Repository
 Architecture: amd64 arm64 all
-Date: Wed, 23 Sep 2026 20:26:30 UTC
+Date: Wed, 23 Sep 2026 20:27:46 UTC
 MD5Sum:
- d41d8cd98f00b204e9800998ecf8427e 0 Packages
- c5bd20642f32daec797fb4f2826528d6 29 Packages.gz
+ 440a4ef69a633f58967a0d75ba4f6e97 549 Packages
+ 7249669f36710c6671515f62ad51331b 413 Packages.gz
 SHA256:
- e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 0 Packages
- e05c647a194fa716eb9d687f1ce724dcc1add63a7140b2bed4b909a35c2acd1c 29 Packages.gz
+ 9b0836dbac26e62b0d6d6335cb0f9ce696acb2b8d8af1933a1b9436d990187e5 549 Packages
+ dbedcb693391387e32867981955d6c804989e147309e6fd5d9dc61db9896cb37 413 Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iHUEARYKAB0WIQQVz56uY+3h35z5cvCwSFe3yb5WbgUCarQ19gAKCRCwSFe3yb5W
-bsLEAP45UZX7uxXeeppssG2ze7zADyP9wGaruzs5YvzAhwg5ygD6A/KM5ExovfEz
-O0CaC4FnQV76XH41Qr8V0/nE77zKAg4=
-=eRMg
+iHUEARYKAB0WIQQVz56uY+3h35z5cvCwSFe3yb5WbgUCarQ2QgAKCRCwSFe3yb5W
+bse8AP4vj3HF27g5Q42CpRQ1Sh4TVCzA67ypiRK9BikmEjkqPgD/ZobSZco+EQCn
+IC9IDnvmzmkzLQBv2embILQkOdVsDwo=
+=bOKU
 -----END PGP SIGNATURE-----

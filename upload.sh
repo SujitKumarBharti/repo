@@ -139,19 +139,19 @@ packages = data.get("packages", [])
 target = next((p for p in packages if p["name"] == pkg_name), None)
 
 if not target:
-    print(f"Error: Package \"{pkg_name}\" not found in registry.")
+    print("Error: Package \"{}\" not found in registry.".format(pkg_name))
     sys.exit(1)
 
 filepath = os.path.join(script_dir, target.get("filepath", ""))
 if os.path.isfile(filepath):
     os.remove(filepath)
-    print(f"Deleted file: {filepath}")
+    print("Deleted file: {}".format(filepath))
 
 data["packages"] = [p for p in packages if p["name"] != pkg_name]
 with open(reg_file, "w") as f:
     json.dump(data, f, indent=2)
 
-print(f"Successfully removed \"{pkg_name}\" from registry.")
+print("Successfully removed \"{}\" from registry.".format(pkg_name))
 ' "$REGISTRY_FILE" "$SCRIPT_DIR" "$pkg_name"
 
     echo -e "${GREEN}✅ Deletion complete. Remember to commit and push:${NC}"
@@ -209,7 +209,7 @@ with open(sys.argv[1], "r") as f:
 name, os_type = sys.argv[2], sys.argv[3]
 target = next((p for p in data.get("packages", []) if p["name"] == name and p.get("os_type") == os_type), None)
 if target:
-    print(f"EXISTS:{target.get(\"version\", \"\")}:{target.get(\"filepath\", \"\")}")
+    print("EXISTS:{}:{}".format(target.get("version", ""), target.get("filepath", "")))
 else:
     print("NEW")
 ' "$REGISTRY_FILE" "$pkg_name" "$os_type")

@@ -208,6 +208,14 @@ if os.path.isfile(pkg_file) and os.path.isfile(pkg_gz_file):
     with open(os.path.join(deb_dir, "Release"), "w") as f:
         f.write(release_content)
 ' "$deb_dir"
+
+    # Sign Release with GPG to generate InRelease and Release.gpg
+    local gnupg_dir="$SCRIPT_DIR/keys/gnupg"
+    if [ -d "$gnupg_dir" ] && command -v gpg >/dev/null 2>&1; then
+        export GNUPGHOME="$gnupg_dir"
+        gpg --batch --yes --clearsign --output "$deb_dir/InRelease" "$deb_dir/Release" 2>/dev/null || true
+        gpg --batch --yes --detach-sign --armor --output "$deb_dir/Release.gpg" "$deb_dir/Release" 2>/dev/null || true
+    fi
 }
 
 # Core package process function

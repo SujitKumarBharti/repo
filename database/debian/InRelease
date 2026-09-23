@@ -1,0 +1,22 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Archive: stable
+Component: main
+Origin: SujitKumarBharti Repo
+Label: SujitKumarBharti Universal Linux Repository
+Architecture: amd64 arm64 all
+Date: Wed, 23 Sep 2026 20:16:29 UTC
+MD5Sum:
+ 440a4ef69a633f58967a0d75ba4f6e97 549 Packages
+ b2b6de4ef90e34b6117857181af066fc 413 Packages.gz
+SHA256:
+ 9b0836dbac26e62b0d6d6335cb0f9ce696acb2b8d8af1933a1b9436d990187e5 549 Packages
+ 1b8614c67cd424210c0eeaedda30583d8af7a238bfcffc7672178317e6f17ae5 413 Packages.gz
+-----BEGIN PGP SIGNATURE-----
+
+iHUEARYKAB0WIQQVz56uY+3h35z5cvCwSFe3yb5WbgUCarQ1PQAKCRCwSFe3yb5W
+bu0LAP0Q70XUcoJMoNXiGXS9dgzQn3jL7uwW6ZUGMD/pRRd+VQD/UNhEtWoLZeij
+CFD6YmheGSlLIYWoRPK5chrAfcEENg4=
+=mxkm
+-----END PGP SIGNATURE-----

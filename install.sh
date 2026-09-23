@@ -85,9 +85,15 @@ echo -e "${BLUE}🐧 Detected System: ${GREEN}${BOLD}$DISTRO ($DISTRO_FAMILY)${N
 # Configure system package manager
 case "$DISTRO_FAMILY" in
     debian)
+        echo -e "${BLUE}📦 Installing repository GPG verification key...${NC}"
+        mkdir -p /etc/apt/keyrings
+        curl -fsSL "${REPO_BASE}/database/debian/KEY.gpg" | gpg --dearmor -o /etc/apt/keyrings/skb-repo.gpg --yes 2>/dev/null || \
+        curl -fsSL "${REPO_BASE}/database/debian/KEY.gpg" -o /etc/apt/keyrings/skb-repo.gpg
+        chmod 644 /etc/apt/keyrings/skb-repo.gpg
+
         echo -e "${BLUE}📦 Adding APT repository to /etc/apt/sources.list.d/skb-repo.list...${NC}"
         mkdir -p /etc/apt/sources.list.d
-        echo "deb [trusted=yes] ${REPO_BASE}/database/debian ./" > /etc/apt/sources.list.d/skb-repo.list
+        echo "deb [signed-by=/etc/apt/keyrings/skb-repo.gpg] ${REPO_BASE}/database/debian ./" > /etc/apt/sources.list.d/skb-repo.list
 
         echo -e "${BLUE}🔄 Updating apt package cache...${NC}"
         apt-get update -o Dir::Etc::sourcelist="sources.list.d/skb-repo.list" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0" || apt-get update -y || true

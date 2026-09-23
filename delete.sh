@@ -245,7 +245,7 @@ print("  {:<5} {:<24} {:<10} {:<12} {:<30}".format("[#]", "NAME", "VERSION", "DI
 print("  " + "-"*82)
 
 for i, p in enumerate(packages, 1):
-    num = f"[{i}]"
+    num = "[{}]".format(i)
     name = p["name"]
     ver = p.get("version", "-")
     os_t = p.get("os_type", "-")
@@ -274,7 +274,7 @@ with open(sys.argv[1]) as f:
 packages = data.get("packages", [])
 if 0 <= idx < len(packages):
     p = packages[idx]
-    print(f"{p[\"name\"]}|{p.get(\"os_type\", \"\")}")
+    print("{}|{}".format(p["name"], p.get("os_type", "")))
 else:
     print("INVALID")
 ' "$REGISTRY_FILE" "$user_choice")

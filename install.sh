@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Universal Linux Repository Installer Script
+# SujitKumarBharti Universal Linux Repository Setup
 # One-line Setup: curl -fsSL https://sujitkumarbharti.github.io/repo/install.sh | sudo bash
 # Repository: https://github.com/SujitKumarBharti/repo
 # ==============================================================================
@@ -14,148 +14,159 @@ BLUE='\033[0;34m'
 PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 BOLD='\033[1m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-PRIMARY_URL="https://sujitkumarbharti.github.io/repo"
-FALLBACK_URL="https://raw.githubusercontent.com/SujitKumarBharti/repo/main"
+REPO_BASE="https://sujitkumarbharti.github.io/repo"
 
 echo -e "${CYAN}${BOLD}"
 echo "  ╔═══════════════════════════════════════════════════════════════╗"
-echo "  ║        SUJIT KUMAR BHARTI - UNIVERSAL LINUX REPO SETUP        ║"
+echo "  ║        SUJIT KUMAR BHARTI - LINUX REPOSITORY SETUP            ║"
 echo "  ║        https://sujitkumarbharti.github.io/repo                ║"
 echo "  ╚═══════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 
 # Check for root
 if [ "$EUID" -ne 0 ]; then
-    echo -e "${RED}❌ Error: This installer must be run as root or with sudo.${NC}"
+    echo -e "${RED}❌ Error: This script must be run as root or with sudo.${NC}"
     echo -e "Please run:"
-    echo -e "${CYAN}   curl -fsSL https://sujitkumarbharti.github.io/repo/install.sh | sudo bash${NC}"
+    echo -e "${CYAN}   curl -fsSL ${REPO_BASE}/install.sh | sudo bash${NC}"
     exit 1
 fi
 
+# Clean up any legacy helper if present
+rm -f /usr/local/bin/urepo /usr/bin/urepo /usr/local/bin/repo /usr/bin/repo 2>/dev/null || true
+rm -rf /var/lib/urepo 2>/dev/null || true
+
 # Detect Linux Distribution
-DISTRO="Linux"
+DISTRO="unknown"
 DISTRO_FAMILY="unknown"
+
 if [ -f /etc/os-release ]; then
     . /etc/os-release
     DISTRO="${NAME:-$ID}"
+    
     case "$ID" in
-        ubuntu|debian|kali|linuxmint|pop|elementary|raspbian)
+        ubuntu|debian|kali|linuxmint|pop|elementary|raspbian|parrot)
             DISTRO_FAMILY="debian"
             ;;
         fedora|rhel|centos|rocky|almalinux)
             DISTRO_FAMILY="fedora"
             ;;
-        arch|manjaro|endeavouros)
+        arch|manjaro|endeavouros|garuda)
             DISTRO_FAMILY="arch"
             ;;
     esac
-fi
-echo -e "${BLUE}🐧 Detected Linux System: ${GREEN}${BOLD}$DISTRO${NC}"
 
-# Check required utilities (curl, python3)
-echo -e "${BLUE}🔍 Checking system prerequisites...${NC}"
-MISSING_TOOLS=()
-for tool in curl python3 sha256sum; do
-    if ! command -v "$tool" >/dev/null 2>&1; then
-        MISSING_TOOLS+=("$tool")
-    fi
-done
-
-if [ ${#MISSING_TOOLS[@]} -gt 0 ]; then
-    echo -e "${YELLOW}⚙️  Installing missing dependencies: ${MISSING_TOOLS[*]}${NC}"
-    if command -v apt-get >/dev/null 2>&1; then
-        apt-get update -y && apt-get install -y "${MISSING_TOOLS[@]}"
-    elif command -v dnf >/dev/null 2>&1; then
-        dnf install -y "${MISSING_TOOLS[@]}"
-    elif command -v pacman >/dev/null 2>&1; then
-        pacman -Sy --noconfirm "${MISSING_TOOLS[@]}"
-    else
-        echo -e "${RED}❌ Please install ${MISSING_TOOLS[*]} manually and re-run.${NC}"
-        exit 1
+    # Check ID_LIKE if still unknown
+    if [ "$DISTRO_FAMILY" == "unknown" ]; then
+        for like in $ID_LIKE; do
+            case "$like" in
+                debian|ubuntu) DISTRO_FAMILY="debian"; break ;;
+                fedora|rhel)   DISTRO_FAMILY="fedora"; break ;;
+                arch)          DISTRO_FAMILY="arch"; break ;;
+            esac
+        done
     fi
 fi
 
-# Download urepo CLI
-echo -e "${BLUE}📥 Installing universal repository manager CLI ('urepo' and 'repo')...${NC}"
-TEMP_BIN=$(mktemp)
-
-DOWNLOAD_SUCCESS=false
-if curl -fsSL --connect-timeout 5 "$PRIMARY_URL/bin/urepo" -o "$TEMP_BIN" 2>/dev/null; then
-    DOWNLOAD_SUCCESS=true
-elif curl -fsSL --connect-timeout 8 "$FALLBACK_URL/bin/urepo" -o "$TEMP_BIN" 2>/dev/null; then
-    DOWNLOAD_SUCCESS=true
+# Fallback detection
+if [ "$DISTRO_FAMILY" == "unknown" ]; then
+    if [ -f /etc/debian_version ] || command -v apt-get >/dev/null 2>&1; then
+        DISTRO_FAMILY="debian"
+    elif [ -f /etc/redhat-release ] || command -v dnf >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then
+        DISTRO_FAMILY="fedora"
+    elif [ -f /etc/arch-release ] || command -v pacman >/dev/null 2>&1; then
+        DISTRO_FAMILY="arch"
+    fi
 fi
 
-if [ "$DOWNLOAD_SUCCESS" != "true" ]; then
-    rm -f "$TEMP_BIN"
-    echo -e "${RED}❌ Failed to download urepo CLI from repository.${NC}"
-    echo "Please check your network connection."
-    exit 1
-fi
+echo -e "${BLUE}🐧 Detected System: ${GREEN}${BOLD}$DISTRO ($DISTRO_FAMILY)${NC}"
 
-# Install to BOTH /usr/local/bin and /usr/bin to guarantee sudo PATH availability
-cp "$TEMP_BIN" /usr/local/bin/urepo
-chmod 755 /usr/local/bin/urepo
-ln -sf /usr/local/bin/urepo /usr/local/bin/repo
+# Configure system package manager
+case "$DISTRO_FAMILY" in
+    debian)
+        echo -e "${BLUE}📦 Adding APT repository to /etc/apt/sources.list.d/skb-repo.list...${NC}"
+        mkdir -p /etc/apt/sources.list.d
+        echo "deb [trusted=yes] ${REPO_BASE}/database/debian ./" > /etc/apt/sources.list.d/skb-repo.list
 
-if [ -d /usr/bin ]; then
-    cp "$TEMP_BIN" /usr/bin/urepo
-    chmod 755 /usr/bin/urepo
-    ln -sf /usr/bin/urepo /usr/bin/repo
-fi
-rm -f "$TEMP_BIN"
+        echo -e "${BLUE}🔄 Updating apt package cache...${NC}"
+        apt-get update -o Dir::Etc::sourcelist="sources.list.d/skb-repo.list" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0" || apt-get update -y || true
 
-# Initialize urepo cache
-mkdir -p /var/lib/urepo
-chmod 755 /var/lib/urepo
+        echo ""
+        echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${NC}"
+        echo -e "${GREEN}${BOLD}🎉 REPOSITORY ADDED SUCCESSFULLY TO APT!${NC}"
+        echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${NC}"
+        echo ""
+        echo -e "${BOLD}Ab aap seedhe standard apt commands use kar sakte hain:${NC}"
+        echo -e "  • ${CYAN}sudo apt update${NC}"
+        echo -e "  • ${CYAN}sudo apt search <package>${NC}       (e.g., sudo apt search omengaminghub)"
+        echo -e "  • ${CYAN}sudo apt install <package>${NC}      (e.g., sudo apt install omengaminghub)"
+        echo -e "  • ${CYAN}sudo apt remove <package>${NC}       (e.g., sudo apt remove omengaminghub)"
+        echo ""
+        ;;
 
-echo -e "${BLUE}🔄 Fetching repository registry...${NC}"
-TEMP_REG=$(mktemp)
-if curl -fsSL --connect-timeout 5 "$PRIMARY_URL/database/registry.json" -o "$TEMP_REG" 2>/dev/null || \
-   curl -fsSL --connect-timeout 8 "$FALLBACK_URL/database/registry.json" -o "$TEMP_REG" 2>/dev/null; then
-    mv "$TEMP_REG" /var/lib/urepo/registry.json
-    chmod 644 /var/lib/urepo/registry.json
-else
-    rm -f "$TEMP_REG"
-    echo -e "${YELLOW}⚠️  Could not pre-cache registry now. It will be fetched automatically on first use.${NC}"
-fi
-
-# Configure Native Package Manager Repositories
-if [ "$DISTRO_FAMILY" == "debian" ] || [ -d /etc/apt/sources.list.d ]; then
-    echo -e "${BLUE}⚙️  Configuring native APT repository (/etc/apt/sources.list.d/skb-repo.list)...${NC}"
-    echo "deb [trusted=yes] https://sujitkumarbharti.github.io/repo/database/debian ./" > /etc/apt/sources.list.d/skb-repo.list
-    echo -e "${BLUE}🔄 Updating apt package lists...${NC}"
-    apt-get update -y || true
-elif [ "$DISTRO_FAMILY" == "fedora" ] || [ -d /etc/yum.repos.d ]; then
-    echo -e "${BLUE}⚙️  Configuring native DNF/YUM repository (/etc/yum.repos.d/skb-repo.repo)...${NC}"
-    cat << 'EOF' > /etc/yum.repos.d/skb-repo.repo
+    fedora)
+        echo -e "${BLUE}📦 Adding DNF repository to /etc/yum.repos.d/skb-repo.repo...${NC}"
+        mkdir -p /etc/yum.repos.d
+        cat << EOF > /etc/yum.repos.d/skb-repo.repo
 [skb-repo]
-name=SujitKumarBharti Universal Linux Repository
-baseurl=https://sujitkumarbharti.github.io/repo/database/fedora
+name=SujitKumarBharti Linux Repository
+baseurl=${REPO_BASE}/database/fedora
 enabled=1
 gpgcheck=0
 EOF
-fi
 
-echo ""
-echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}${BOLD}🎉 REPOSITORY ADDED SUCCESSFULLY!${NC}"
-echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${NC}"
-echo ""
-echo -e "${BOLD}Aap 2 tariko se packages install kar sakte hain:${NC}"
-echo ""
-echo -e "${CYAN}${BOLD}Option 1: Native APT se direct install karein:${NC}"
-echo -e "  • ${GREEN}sudo apt update${NC}"
-echo -e "  • ${GREEN}sudo apt search omengaminghub${NC}"
-echo -e "  • ${GREEN}sudo apt install omengaminghub${NC}"
-echo ""
-echo -e "${CYAN}${BOLD}Option 2: Universal CLI (urepo / repo) se:${NC}"
-echo -e "  • ${GREEN}urepo list${NC}                     View all available packages"
-echo -e "  • ${GREEN}urepo search <term>${NC}            Search packages"
-echo -e "  • ${GREEN}sudo urepo install <name>${NC}      Install package (e.g., sudo urepo install omengaminghub)"
-echo -e "  • ${GREEN}sudo urepo remove <name>${NC}       Uninstall package"
-echo ""
-echo -e "${PURPLE}Enjoy using SujitKumarBharti Universal Linux Repository! 🚀${NC}"
+        echo -e "${BLUE}🔄 Updating dnf cache...${NC}"
+        if command -v dnf >/dev/null 2>&1; then
+            dnf check-update || true
+        else
+            yum check-update || true
+        fi
+
+        echo ""
+        echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${NC}"
+        echo -e "${GREEN}${BOLD}🎉 REPOSITORY ADDED SUCCESSFULLY TO DNF/YUM!${NC}"
+        echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${NC}"
+        echo ""
+        echo -e "${BOLD}Ab aap seedhe standard dnf commands use kar sakte hain:${NC}"
+        echo -e "  • ${CYAN}sudo dnf search <package>${NC}"
+        echo -e "  • ${CYAN}sudo dnf install <package>${NC}"
+        echo -e "  • ${CYAN}sudo dnf remove <package>${NC}"
+        echo ""
+        ;;
+
+    arch)
+        echo -e "${BLUE}📦 Configuring Pacman repository in /etc/pacman.conf...${NC}"
+        if ! grep -q "\[skb-repo\]" /etc/pacman.conf; then
+            cat << EOF >> /etc/pacman.conf
+
+[skb-repo]
+SigLevel = Optional TrustAll
+Server = ${REPO_BASE}/database/arch
+EOF
+        fi
+
+        echo -e "${BLUE}🔄 Syncing pacman databases...${NC}"
+        pacman -Sy || true
+
+        echo ""
+        echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${NC}"
+        echo -e "${GREEN}${BOLD}🎉 REPOSITORY ADDED SUCCESSFULLY TO PACMAN!${NC}"
+        echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${NC}"
+        echo ""
+        echo -e "${BOLD}Ab aap seedhe standard pacman commands use kar sakte hain:${NC}"
+        echo -e "  • ${CYAN}sudo pacman -Ss <package>${NC}"
+        echo -e "  • ${CYAN}sudo pacman -S <package>${NC}"
+        echo -e "  • ${CYAN}sudo pacman -R <package>${NC}"
+        echo ""
+        ;;
+
+    *)
+        echo -e "${YELLOW}⚠️  Could not determine a native package manager for this OS.${NC}"
+        echo "Supported: Debian, Ubuntu, Kali, Fedora, RHEL, Arch Linux."
+        exit 1
+        ;;
+esac
+
+echo -e "${PURPLE}Enjoy using SujitKumarBharti Linux Repository! 🚀${NC}"
 echo ""

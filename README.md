@@ -77,13 +77,32 @@ If a package with the same name already exists in that category:
 
 ---
 
-### 2. Publishing Changes to GitHub
+### 2. Interactive Delete Manager (`delete.sh`)
+To safely remove a package from the repository:
 
-After uploading or updating any package, push the repository live:
+```bash
+./delete.sh
+```
+
+- Shows a clean numbered list of all packages in the repository.
+- Type the number (e.g. `1`) or the package name to delete.
+- Asks for confirmation before deleting.
+- Automatically cleans up the physical file, updates `registry.json`, and regenerates the repository indexes (`Packages`, `Packages.gz`, `Release`).
+
+Or delete directly via command:
+```bash
+./delete.sh omengaminghub
+```
+
+---
+
+### 3. Publishing Changes to GitHub
+
+After uploading, updating, or deleting any package, push the repository live:
 
 ```bash
 git add .
-git commit -m "feat: rolled out <package-name> v<version>"
+git commit -m "update repository packages"
 git push
 ```
 

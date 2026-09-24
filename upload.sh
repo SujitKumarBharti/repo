@@ -119,60 +119,10 @@ else:
 ' "$REGISTRY_FILE" "$query"
 }
 
-# Delete package
+# Delete package (delegates to delete.sh)
 delete_package() {
     local pkg_name="$1"
-    ensure_registry
-    echo -e "${YELLOW}⚠️  Attempting to delete package: ${pkg_name}${NC}"
-    
-    local rel_fpath
-    rel_fpath=$(python3 -c '
-import json, sys
-with open(sys.argv[1]) as f:
-    d = json.load(f)
-p = next((x for x in d.get("packages", []) if x["name"] == sys.argv[2]), None)
-print(p.get("filepath", "") if p else "")
-' "$REGISTRY_FILE" "$pkg_name")
-
-    if [ -n "$rel_fpath" ] && [ -d "$SCRIPT_DIR/.git" ]; then
-        git rm --sparse -f "$rel_fpath" 2>/dev/null || git rm -f "$rel_fpath" 2>/dev/null || true
-    fi
-
-    python3 -c '
-import json, os, sys
-
-reg_file = sys.argv[1]
-script_dir = sys.argv[2]
-pkg_name = sys.argv[3]
-
-with open(reg_file, "r") as f:
-    data = json.load(f)
-
-packages = data.get("packages", [])
-target = next((p for p in packages if p["name"] == pkg_name), None)
-
-if not target:
-    print("Error: Package \"{}\" not found in registry.".format(pkg_name))
-    sys.exit(1)
-
-filepath = os.path.join(script_dir, target.get("filepath", ""))
-if os.path.isfile(filepath):
-    os.remove(filepath)
-    print("Deleted file: {}".format(filepath))
-
-data["packages"] = [p for p in packages if p["name"] != pkg_name]
-with open(reg_file, "w") as f:
-    json.dump(data, f, indent=2)
-
-print("Successfully removed \"{}\" from registry.".format(pkg_name))
-' "$REGISTRY_FILE" "$SCRIPT_DIR" "$pkg_name"
-
-    update_apt_repo
-
-    echo -e "${GREEN}✅ Deletion complete. Remember to commit and push:${NC}"
-    echo "   git add database/"
-    echo "   git commit -m \"chore: removed $pkg_name\""
-    echo "   git push"
+    "$SCRIPT_DIR/delete.sh" "$pkg_name" -y
 }
 
 # Update native APT repository indexes for Debian/Ubuntu/Kali
@@ -433,33 +383,21 @@ print(sha256)
     echo -e "   • SHA256:      ${PURPLE}$sha256${NC}"
     echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${NC}"
     echo ""
-    echo ""
+    echo -e "${BLUE}📦 Automatically staging, committing, and pushing to GitHub...${NC}"
     git config advice.updateSparsePath false 2>/dev/null || true
-    read -p "🚀 Push to GitHub & automatically clean local disk space now? [y/N]: " auto_push_clean
-    if [[ "$auto_push_clean" =~ ^[Yy]$ ]]; then
-        echo -e "${BLUE}📦 Staging and committing changes...${NC}"
-        git add --sparse database/
-        git commit -m "feat: roll out $pkg_name v$pkg_version for $os_type" || true
-        echo -e "${BLUE}🚀 Pushing to GitHub...${NC}"
-        if git push; then
-            echo -e "${BLUE}🧹 Automatically cleaning local binary to free disk space...${NC}"
-            git sparse-checkout set --no-cone '/*' '!database/*/*.deb' '!database/*/*.rpm' '!database/*/*.pkg.tar.zst' '!database/*/*.run' '!database/*/*.AppImage' 2>/dev/null || true
-            echo -e "${GREEN}${BOLD}🎉 SUCCESS! Package is live on GitHub and local disk space has been cleaned automatically! ✨${NC}"
-        else
-            echo -e "${YELLOW}⚠️ Git push was not completed (e.g. requires credentials in terminal).${NC}"
-            echo -e "After pushing manually, you can clean local disk space anytime with: ${CYAN}./delete.sh -c${NC}"
-        fi
-    else
-        echo -e "${YELLOW}${BOLD}🚀 NEXT STEP - PUSH TO GITHUB:${NC}"
-        echo "Run these commands when you are ready to publish online:"
-        echo -e "${CYAN}   git add --sparse database/${NC}"
-        echo -e "${CYAN}   git commit -m \"feat: roll out $pkg_name v$pkg_version for $os_type\"${NC}"
-        echo -e "${CYAN}   git push${NC}"
+    git add --sparse database/
+    git commit -m "feat: roll out $pkg_name v$pkg_version for $os_type" || true
+    echo -e "${BLUE}🚀 Pushing package to GitHub...${NC}"
+    if git push; then
+        echo -e "${BLUE}🧹 Automatically cleaning local binary to free disk space...${NC}"
+        git sparse-checkout set --no-cone '/*' '!database/*/*.deb' '!database/*/*.rpm' '!database/*/*.pkg.tar.zst' '!database/*/*.run' '!database/*/*.AppImage' 2>/dev/null || true
         echo ""
-        echo -e "${YELLOW}${BOLD}💾 LOCAL DISK SPACE OPTIMIZATION:${NC}"
-        echo -e "To automatically free local PC disk space after pushing, simply run:"
-        echo -e "${CYAN}   ./delete.sh -c${NC}"
-        echo -e "(or select option [c] from ${CYAN}./delete.sh${NC} interactive menu)."
+        echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${NC}"
+        echo -e "${GREEN}${BOLD}🎉 SUCCESS! Package '$pkg_name' is live on GitHub! ✨${NC}"
+        echo -e "${GREEN}${BOLD}🧹 Local disk space cleaned: 0 MB wasted locally!${NC}"
+        echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${NC}"
+    else
+        echo -e "${YELLOW}⚠️ Git push was not completed. You can push manually with: ${CYAN}git push${NC}"
     fi
     echo ""
 }

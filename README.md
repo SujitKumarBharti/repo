@@ -97,18 +97,14 @@ If `omengaminghub` already exists in the repository:
 ./upload.sh -f ~/Downloads/omengaminghub_0.1.1_amd64.deb -n omengaminghub -v 0.1.1 -o debian -d "HP Omen Gaming Hub for Linux"
 ```
 
-#### 🚀 Push to GitHub & Auto Clean Local Disk:
-At the end of upload, the wizard will ask:
-```text
-🚀 Push to GitHub & automatically clean local disk space now? [y/N]: y
-```
-- Press **`y`**: Automatically commits and pushes to GitHub, then immediately frees the local disk space using sparse-checkout!
-- Or push manually in terminal:
-  ```bash
-  git add --sparse database/
-  git commit -m "feat: roll out omengaminghub"
-  git push
-  ```
+#### 🚀 Fully Automated Rollout & Local Disk Cleanup:
+At the end of upload, `upload.sh` automatically:
+1. Recalculates cryptographic hashes and updates `database/registry.json`.
+2. Re-generates APT repository indexes (`Packages`, `Packages.gz`, `Release`, GPG signatures).
+3. Automatically runs `git add --sparse database/` and commits with a descriptive message.
+4. Automatically runs `git push` to publish the package live on GitHub.
+5. Automatically runs local sparse-checkout cleanup so your PC stays at **0 MB disk usage**!
+*(Zero manual git commands required!)*
 
 ---
 
@@ -148,16 +144,15 @@ You will see the list of all hosted packages:
   ----------------------------------------------------------------------------------
   [1]   omengaminghub           0.1.1      debian       omengaminghub_0.1.1.deb
 ```
-1. Type `1` (or `omengaminghub`) and press **Enter**.
+1. Type `1` (or package name) and press **Enter**.
 2. Confirm deletion (`y`).
-3. Press `y` when asked: `🚀 Push deletion to GitHub now? [y/N]: y`
-4. The package is permanently removed from Git, `database/registry.json`, and APT indexes online!
+3. That's it! `delete.sh` automatically removes the package, updates indexes, stages changes, commits, and pushes directly to GitHub!
 
 #### Option B: Direct Command
 ```bash
-./delete.sh omengaminghub
-git push
+./delete.sh omengaminghub -y
 ```
+*(Automatically removes, commits, and pushes to GitHub with 0 manual steps).*
 
 ---
 

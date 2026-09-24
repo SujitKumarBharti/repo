@@ -105,7 +105,7 @@ At the end of upload, the wizard will ask:
 - Press **`y`**: Automatically commits and pushes to GitHub, then immediately frees the local disk space using sparse-checkout!
 - Or push manually in terminal:
   ```bash
-  git add database/
+  git add --sparse database/
   git commit -m "feat: roll out omengaminghub"
   git push
   ```

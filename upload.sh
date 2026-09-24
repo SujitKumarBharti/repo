@@ -434,10 +434,11 @@ print(sha256)
     echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${NC}"
     echo ""
     echo ""
+    git config advice.updateSparsePath false 2>/dev/null || true
     read -p "🚀 Push to GitHub & automatically clean local disk space now? [y/N]: " auto_push_clean
     if [[ "$auto_push_clean" =~ ^[Yy]$ ]]; then
         echo -e "${BLUE}📦 Staging and committing changes...${NC}"
-        git add database/
+        git add --sparse database/
         git commit -m "feat: roll out $pkg_name v$pkg_version for $os_type" || true
         echo -e "${BLUE}🚀 Pushing to GitHub...${NC}"
         if git push; then
@@ -451,7 +452,7 @@ print(sha256)
     else
         echo -e "${YELLOW}${BOLD}🚀 NEXT STEP - PUSH TO GITHUB:${NC}"
         echo "Run these commands when you are ready to publish online:"
-        echo -e "${CYAN}   git add database/${NC}"
+        echo -e "${CYAN}   git add --sparse database/${NC}"
         echo -e "${CYAN}   git commit -m \"feat: roll out $pkg_name v$pkg_version for $os_type\"${NC}"
         echo -e "${CYAN}   git push${NC}"
         echo ""

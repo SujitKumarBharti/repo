@@ -71,7 +71,8 @@ clean_local_disk() {
         echo -e "${YELLOW}Please push your uploaded packages to GitHub before cleaning local copies!${NC}"
         read -p "Do you want to commit and push now? [y/N]: " push_choice
         if [[ "$push_choice" =~ ^[Yy]$ ]]; then
-            git add database/
+            git config advice.updateSparsePath false 2>/dev/null || true
+            git add --sparse database/
             git commit -m "chore: save packages to repository" || true
             git push || true
         else
@@ -328,7 +329,8 @@ with open(reg_file, "w") as f:
     read -p "🚀 Push deletion to GitHub now? [y/N]: " auto_push_delete
     if [[ "$auto_push_delete" =~ ^[Yy]$ ]]; then
         echo -e "${BLUE}📦 Staging and committing deletion...${NC}"
-        git add database/
+        git config advice.updateSparsePath false 2>/dev/null || true
+        git add --sparse database/
         git commit -m "chore: delete $name v$ver from $os_type" || true
         echo -e "${BLUE}🚀 Pushing to GitHub...${NC}"
         if git push; then
@@ -341,7 +343,7 @@ with open(reg_file, "w") as f:
         echo ""
         echo -e "${YELLOW}${BOLD}🚀 NEXT STEP - PUSH TO GITHUB:${NC}"
         echo "Run these commands to apply the deletion online:"
-        echo -e "${CYAN}   git add database/${NC}"
+        echo -e "${CYAN}   git add --sparse database/${NC}"
         echo -e "${CYAN}   git commit -m \"chore: delete $name v$ver from $os_type\"${NC}"
         echo -e "${CYAN}   git push${NC}"
     fi

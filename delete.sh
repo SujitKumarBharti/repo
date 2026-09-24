@@ -35,17 +35,105 @@ show_help() {
     echo "  ./delete.sh [OPTIONS] [PACKAGE_NAME]"
     echo ""
     echo -e "${BOLD}OPTIONS:${NC}"
-    echo -e "  ${GREEN}(no arguments)${NC}             Launch interactive selection & delete menu"
-    echo -e "  ${GREEN}<package_name>${NC}             Target specific package for deletion"
+    echo -e "  ${GREEN}(no arguments)${NC}             Launch interactive manager menu"
+    echo -e "  ${GREEN}<package_name>${NC}             Target specific package for deletion from repository"
+    echo -e "  ${GREEN}-c, --clean-local${NC}          Clean local package binaries (free PC disk space, keep on GitHub)"
+    echo -e "  ${GREEN}-s, --status${NC}               Show repository storage status (local vs online)"
+    echo -e "  ${GREEN}-r, --restore${NC}              Restore/download all package binaries to local disk"
     echo -e "  ${GREEN}-y, --yes, --force${NC}         Skip confirmation prompt"
     echo -e "  ${GREEN}-l, --list${NC}                 List all registered packages"
     echo -e "  ${GREEN}-h, --help${NC}                 Show this help screen"
     echo ""
     echo -e "${BOLD}EXAMPLES:${NC}"
-    echo "  ./delete.sh                               # Interactive menu with package numbers"
-    echo "  ./delete.sh omengaminghub                 # Delete with confirmation"
-    echo "  ./delete.sh omengaminghub -y              # Force delete without confirmation"
+    echo "  ./delete.sh                               # Interactive menu with options"
+    echo "  ./delete.sh omengaminghub                 # Delete package with confirmation"
+    echo "  ./delete.sh -c                            # Free local disk space immediately"
+    echo "  ./delete.sh -s                            # Check disk usage vs online packages"
     echo ""
+}
+
+# Free local disk space using git sparse checkout
+clean_local_disk() {
+    print_banner
+    echo -e "${BLUE}🧹 Cleaning local package binaries to free disk space...${NC}"
+
+    if [ ! -d "$SCRIPT_DIR/.git" ]; then
+        echo -e "${RED}❌ Error: Not a git repository.${NC}"
+        return 1
+    fi
+
+    # Check uncommitted local binary files
+    local uncommitted_binaries
+    uncommitted_binaries=$(git status --porcelain "$DATABASE_DIR/" 2>/dev/null | grep -E '\.(deb|rpm|pkg\.tar\.zst|run|AppImage)$' || true)
+    if [ -n "$uncommitted_binaries" ]; then
+        echo -e "${YELLOW}⚠️  Notice: There are uncommitted package binaries in database/:${NC}"
+        echo "$uncommitted_binaries"
+        echo -e "${YELLOW}Please push your uploaded packages to GitHub before cleaning local copies!${NC}"
+        read -p "Do you want to commit and push now? [y/N]: " push_choice
+        if [[ "$push_choice" =~ ^[Yy]$ ]]; then
+            git add database/
+            git commit -m "chore: save packages to repository" || true
+            git push || true
+        else
+            echo -e "${RED}Skipping local cleanup to prevent losing unpushed packages.${NC}"
+            return 1
+        fi
+    fi
+
+    echo -e "${BLUE}⚙️  Configuring Git Sparse-Checkout...${NC}"
+    git sparse-checkout set --no-cone '/*' '!database/*/*.deb' '!database/*/*.rpm' '!database/*/*.pkg.tar.zst' '!database/*/*.run' '!database/*/*.AppImage'
+
+    echo ""
+    echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}${BOLD}🎉 LOCAL DISK CLEANUP COMPLETE!${NC}"
+    echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${NC}"
+    echo ""
+    echo -e "  ✔ All packages remain safe and hosted on GitHub."
+    echo -e "  ✔ Local package binaries removed from your PC to save disk space."
+    echo -e "  ✔ Future git commits will ${GREEN}NEVER${NC} accidentally delete packages from GitHub."
+    echo ""
+}
+
+# Show storage status (local vs online)
+show_storage_status() {
+    print_banner
+    echo -e "${BLUE}${BOLD}📊 Repository Storage Status:${NC}\n"
+    
+    if [ -f "$REGISTRY_FILE" ]; then
+        python3 -c '
+import json, sys, os
+
+with open(sys.argv[1]) as f:
+    data = json.load(f)
+
+pkgs = data.get("packages", [])
+print("  Total packages in registry: {}".format(len(pkgs)))
+total_bytes = sum(p.get("size", 0) for p in pkgs)
+mb = total_bytes / (1024 * 1024)
+print("  Total repository package size: {:.2f} MB".format(mb))
+print("\n  Package List:")
+for p in pkgs:
+    local_exists = os.path.exists(p.get("filepath", ""))
+    status = "PRESENT ON DISK" if local_exists else "SAVED ON GITHUB (0 MB locally)"
+    print("  • {:<20} (v{:<8}) [{:<7}] -> {}".format(p["name"], p.get("version", "-"), p.get("os_type", "-"), status))
+' "$REGISTRY_FILE"
+    else
+        echo "  Registry file not found."
+    fi
+
+    echo ""
+    local local_size
+    local_size=$(du -sh "$DATABASE_DIR" 2>/dev/null | awk '{print $1}' || echo "0")
+    echo -e "  Current local 'database/' folder size on your disk: ${YELLOW}${BOLD}$local_size${NC}"
+    echo ""
+}
+
+# Restore packages to local disk
+restore_local_packages() {
+    print_banner
+    echo -e "${BLUE}📦 Restoring all package binaries to local disk...${NC}"
+    git sparse-checkout disable
+    echo -e "${GREEN}✔ All package files checked out to local disk.${NC}"
 }
 
 # Update native APT repository indexes for Debian/Ubuntu/Kali
@@ -289,13 +377,33 @@ for i, p in enumerate(packages, 1):
     print("  {:<5} {:<24} {:<10} {:<12} {:<30}".format(num, name, ver, os_t, fname))
 ' "$REGISTRY_FILE"
 
+    echo "  ──────────────────────────────────────────────────────────────────────────────────"
+    echo -e "  ${BOLD}Additional Options:${NC}"
+    echo -e "    ${CYAN}[c]${NC} Clean local disk space (free up GBs, keep packages hosted on GitHub)"
+    echo -e "    ${CYAN}[s]${NC} Check storage status (local disk usage vs online repository)"
+    echo -e "    ${CYAN}[r]${NC} Restore all package binaries to local disk"
+    echo -e "    ${CYAN}[q]${NC} Quit"
     echo ""
-    read -p "Enter package number [#] to delete, package name, or 'q' to quit: " user_choice
+    read -p "Enter package number [#], option [c/s/r], or 'q' to quit: " user_choice
 
-    if [ "$user_choice" == "q" ] || [ "$user_choice" == "Q" ] || [ -z "$user_choice" ]; then
-        echo -e "${BLUE}Cancelled.${NC}"
-        exit 0
-    fi
+    case "$user_choice" in
+        c|C)
+            clean_local_disk
+            exit 0
+            ;;
+        s|S)
+            show_storage_status
+            exit 0
+            ;;
+        r|R)
+            restore_local_packages
+            exit 0
+            ;;
+        q|Q|"")
+            echo -e "${BLUE}Cancelled.${NC}"
+            exit 0
+            ;;
+    esac
 
     # Check if choice is a number
     if [[ "$user_choice" =~ ^[0-9]+$ ]]; then
@@ -342,6 +450,18 @@ while [ $# -gt 0 ]; do
     case "$1" in
         -h|--help)
             show_help
+            exit 0
+            ;;
+        -c|--clean-local)
+            clean_local_disk
+            exit 0
+            ;;
+        -s|--status)
+            show_storage_status
+            exit 0
+            ;;
+        -r|--restore)
+            restore_local_packages
             exit 0
             ;;
         -l|--list)

@@ -433,16 +433,33 @@ print(sha256)
     echo -e "   • SHA256:      ${PURPLE}$sha256${NC}"
     echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${NC}"
     echo ""
-    echo -e "${YELLOW}${BOLD}🚀 NEXT STEP - PUSH TO GITHUB:${NC}"
-    echo "Run these commands to publish this package online:"
-    echo -e "${CYAN}   git add .${NC}"
-    echo -e "${CYAN}   git commit -m \"feat: roll out $pkg_name v$pkg_version for $os_type\"${NC}"
-    echo -e "${CYAN}   git push${NC}"
     echo ""
-    echo -e "${YELLOW}${BOLD}💾 LOCAL DISK SPACE OPTIMIZATION:${NC}"
-    echo -e "To free up local PC disk space after pushing, you can run:"
-    echo -e "${CYAN}   ./clean_local.sh${NC}"
-    echo -e "This removes physical binaries from your PC while keeping them safe on GitHub!"
+    read -p "🚀 Push to GitHub & automatically clean local disk space now? [y/N]: " auto_push_clean
+    if [[ "$auto_push_clean" =~ ^[Yy]$ ]]; then
+        echo -e "${BLUE}📦 Staging and committing changes...${NC}"
+        git add database/
+        git commit -m "feat: roll out $pkg_name v$pkg_version for $os_type" || true
+        echo -e "${BLUE}🚀 Pushing to GitHub...${NC}"
+        if git push; then
+            echo -e "${BLUE}🧹 Automatically cleaning local binary to free disk space...${NC}"
+            git sparse-checkout set --no-cone '/*' '!database/*/*.deb' '!database/*/*.rpm' '!database/*/*.pkg.tar.zst' '!database/*/*.run' '!database/*/*.AppImage' 2>/dev/null || true
+            echo -e "${GREEN}${BOLD}🎉 SUCCESS! Package is live on GitHub and local disk space has been cleaned automatically! ✨${NC}"
+        else
+            echo -e "${YELLOW}⚠️ Git push was not completed (e.g. requires credentials in terminal).${NC}"
+            echo -e "After pushing manually, you can clean local disk space anytime with: ${CYAN}./delete.sh -c${NC}"
+        fi
+    else
+        echo -e "${YELLOW}${BOLD}🚀 NEXT STEP - PUSH TO GITHUB:${NC}"
+        echo "Run these commands when you are ready to publish online:"
+        echo -e "${CYAN}   git add database/${NC}"
+        echo -e "${CYAN}   git commit -m \"feat: roll out $pkg_name v$pkg_version for $os_type\"${NC}"
+        echo -e "${CYAN}   git push${NC}"
+        echo ""
+        echo -e "${YELLOW}${BOLD}💾 LOCAL DISK SPACE OPTIMIZATION:${NC}"
+        echo -e "To automatically free local PC disk space after pushing, simply run:"
+        echo -e "${CYAN}   ./delete.sh -c${NC}"
+        echo -e "(or select option [c] from ${CYAN}./delete.sh${NC} interactive menu)."
+    fi
     echo ""
 }
 

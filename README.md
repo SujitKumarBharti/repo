@@ -48,6 +48,21 @@ sudo pacman -S <package>
 
 ---
 
+## 🗑️ Uninstall (Remove Repository)
+
+To completely remove this repository and its verification keys from your system:
+
+```bash
+curl -fsSL https://sujitkumarbharti.github.io/repo/uninstall.sh | sudo bash
+```
+
+This cleans up all repository configurations and refreshes your package manager:
+- **Debian / Ubuntu / Kali Linux**: Removes `/etc/apt/sources.list.d/skb-repo.list`, `/etc/apt/keyrings/skb-repo.gpg`, and refreshes APT cache.
+- **Fedora / RHEL / CentOS**: Removes `/etc/yum.repos.d/skb-repo.repo` and clears DNF/YUM cache.
+- **Arch Linux / Manjaro**: Removes `[skb-repo]` entry from `/etc/pacman.conf` and syncs databases.
+
+---
+
 ## 📦 Maintainer Guide (How to Upload & Roll Out Packages)
 
 ### 1. Interactive Upload Wizard
@@ -119,6 +134,7 @@ repo/
 │   ├── universal/       # Standalone binaries / scripts
 │   └── registry.json    # Central repository metadata
 ├── install.sh           # One-line curl installer for systems
+├── uninstall.sh         # One-line curl uninstaller / cleaner
 ├── upload.sh            # Maintainer package upload & rollout manager
 └── README.md            # Repository documentation
 ```

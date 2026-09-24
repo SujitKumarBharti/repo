@@ -23,6 +23,21 @@ This automatically detects your distribution and configures your system's packag
 
 ---
 
+## 🗑️ Remove / Uninstall Repository
+
+To completely remove this repository and its verification keys from your system:
+
+```bash
+curl -fsSL https://sujitkumarbharti.github.io/repo/uninstall.sh | sudo bash
+```
+
+This automatically detects your distribution, cleans up all configurations, and refreshes your package manager:
+- **Debian / Ubuntu / Kali Linux**: Removes `/etc/apt/sources.list.d/skb-repo.list`, `/etc/apt/keyrings/skb-repo.gpg`, and refreshes APT cache.
+- **Fedora / RHEL / CentOS**: Removes `/etc/yum.repos.d/skb-repo.repo` and clears DNF/YUM cache.
+- **Arch Linux / Manjaro**: Removes `[skb-repo]` entry from `/etc/pacman.conf` and resyncs databases.
+
+---
+
 ## 💻 Installing Packages (Native Commands)
 
 Once added, simply use your system's default package manager:
@@ -45,21 +60,6 @@ sudo dnf install <package>
 sudo pacman -Ss <package>
 sudo pacman -S <package>
 ```
-
----
-
-## 🗑️ Uninstall (Remove Repository)
-
-To completely remove this repository and its verification keys from your system:
-
-```bash
-curl -fsSL https://sujitkumarbharti.github.io/repo/uninstall.sh | sudo bash
-```
-
-This cleans up all repository configurations and refreshes your package manager:
-- **Debian / Ubuntu / Kali Linux**: Removes `/etc/apt/sources.list.d/skb-repo.list`, `/etc/apt/keyrings/skb-repo.gpg`, and refreshes APT cache.
-- **Fedora / RHEL / CentOS**: Removes `/etc/yum.repos.d/skb-repo.repo` and clears DNF/YUM cache.
-- **Arch Linux / Manjaro**: Removes `[skb-repo]` entry from `/etc/pacman.conf` and syncs databases.
 
 ---
 

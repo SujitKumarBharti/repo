@@ -11,7 +11,11 @@
       "filepath": "database/debian/omengaminghub_0.1.1.deb",
       "sha256": "948ae539c5b81c82b6e714a0313b6a66ec661a7de2509ee80ee6871fcc3113be",
       "description": "HP Omen Gaming Hub for Linux",
-      "updated_at": "2026-09-23T20:36:58.740813+00:00"
+      "updated_at": "2026-09-23T20:36:58.740813+00:00",
+      "size": 3962062,
+      "md5": "08c4537d24eedba84bbb61e07f935c08",
+      "sha1": "ca5130abaf835b7bd7cb8a359a3f75ba9682e29a",
+      "control_info": "Package: omengaminghub\nVersion: 0.1.1\nArchitecture: amd64\nInstalled-Size: 13789\nMaintainer: Bsilent\nPriority: optional\nDepends: libwebkit2gtk-4.1-0, libgtk-3-0\nDescription: OMEN-style fan and performance control for Linux using NBFC\n A Linux desktop dashboard for monitoring and independently controlling laptop fans through NBFC-Linux.\n"
     }
   ]
 }

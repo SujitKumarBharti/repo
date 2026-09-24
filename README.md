@@ -111,12 +111,41 @@ Or delete directly via command:
 
 ---
 
-### 3. Publishing Changes to GitHub
+### 3. Free Up Local Disk Space (`clean_local.sh`)
+To keep your local PC disk clean while keeping all packages safely hosted on GitHub:
+
+```bash
+./clean_local.sh
+```
+
+- Cleans heavy package binaries (`.deb`, `.rpm`, `.pkg.tar.zst`) from your local disk using Git Sparse-Checkout.
+- Saves 100% of your disk space (packages remain hosted on GitHub for end-users).
+- Future git commits will **NEVER** accidentally delete packages from GitHub.
+- Check local disk vs GitHub repository status anytime:
+  ```bash
+  ./clean_local.sh -s
+  ```
+
+---
+
+### 4. Fresh Setup on a New PC (Lightweight Clone)
+When cloning the repository on a new machine or after a clean PC reset, you do **not** need to download gigabytes of past packages:
+
+```bash
+git clone --filter=blob:none https://github.com/SujitKumarBharti/repo.git
+cd repo
+./clean_local.sh
+```
+This clones only the scripts, metadata, and database registry in seconds without downloading heavy package binaries!
+
+---
+
+### 5. Publishing Changes to GitHub
 
 After uploading, updating, or deleting any package, push the repository live:
 
 ```bash
-git add .
+git add database/
 git commit -m "update repository packages"
 git push
 ```
@@ -132,9 +161,11 @@ repo/
 │   ├── fedora/          # Fedora, RHEL, CentOS (.rpm)
 │   ├── arch/            # Arch, Manjaro (.pkg.tar.zst)
 │   ├── universal/       # Standalone binaries / scripts
-│   └── registry.json    # Central repository metadata
+│   └── registry.json    # Central repository metadata & package database
+├── clean_local.sh       # Free local disk space using sparse-checkout
 ├── install.sh           # One-line curl installer for systems
 ├── uninstall.sh         # One-line curl uninstaller / cleaner
 ├── upload.sh            # Maintainer package upload & rollout manager
+├── delete.sh            # Maintainer interactive package deletion manager
 └── README.md            # Repository documentation
 ```

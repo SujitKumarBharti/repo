@@ -55,47 +55,72 @@ update_apt_repo() {
 
     echo -e "${BLUE}📦 Regenerating APT repository indexes (Packages, Packages.gz, Release)...${NC}"
     python3 -c '
-import os, hashlib, datetime, sys
+import os, hashlib, datetime, sys, json, gzip
 
 deb_dir = sys.argv[1]
-has_dpkg = os.system("which dpkg-scanpackages >/dev/null 2>&1") == 0
+reg_file = sys.argv[2]
 
-if has_dpkg:
-    os.system("cd {} && dpkg-scanpackages . /dev/null > Packages 2>/dev/null && gzip -k -f Packages".format(deb_dir))
+try:
+    with open(reg_file, "r") as f:
+        data = json.load(f)
+except Exception:
+    data = {"packages": []}
+
+packages = data.get("packages", [])
+stanzas = []
+
+for p in packages:
+    if p.get("os_type") == "debian":
+        control = p.get("control_info", "").strip()
+        fname = p.get("filename", "")
+        size = p.get("size", 0)
+        md5 = p.get("md5", "")
+        sha1 = p.get("sha1", "")
+        sha256 = p.get("sha256", "")
+
+        if control:
+            entry = f"{control}\nFilename: ./{fname}\nSize: {size}\nMD5sum: {md5}\nSHA1: {sha1}\nSHA256: {sha256}\n"
+            stanzas.append(entry)
+
+packages_content = "\n".join(stanzas) + ("\n" if stanzas else "")
 
 pkg_file = os.path.join(deb_dir, "Packages")
+with open(pkg_file, "w") as f:
+    f.write(packages_content)
+
 pkg_gz_file = os.path.join(deb_dir, "Packages.gz")
+with open(pkg_file, "rb") as f_in, gzip.open(pkg_gz_file, "wb") as f_out:
+    f_out.write(f_in.read())
 
-if os.path.isfile(pkg_file) and os.path.isfile(pkg_gz_file):
-    def get_hashes(filepath):
-        with open(filepath, "rb") as f:
-            data = f.read()
-        return len(data), hashlib.md5(data).hexdigest(), hashlib.sha256(data).hexdigest()
+def get_hashes(filepath):
+    with open(filepath, "rb") as f:
+        data = f.read()
+    return len(data), hashlib.md5(data).hexdigest(), hashlib.sha256(data).hexdigest()
 
-    pkg_size, pkg_md5, pkg_sha256 = get_hashes(pkg_file)
-    gz_size, gz_md5, gz_sha256 = get_hashes(pkg_gz_file)
+pkg_size, pkg_md5, pkg_sha256 = get_hashes(pkg_file)
+gz_size, gz_md5, gz_sha256 = get_hashes(pkg_gz_file)
 
-    now_rfc = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S UTC")
-    release_content = (
-        "Origin: SujitKumarBharti Repo\n"
-        "Label: SujitKumarBharti Universal Linux Repository\n"
-        "Suite: stable\n"
-        "Codename: stable\n"
-        "Version: 1.0\n"
-        "Components: main\n"
-        "Architectures: amd64 arm64 all\n"
-        "Date: {}\n"
-        "MD5Sum:\n"
-        " {} {} Packages\n"
-        " {} {} Packages.gz\n"
-        "SHA256:\n"
-        " {} {} Packages\n"
-        " {} {} Packages.gz\n"
-    ).format(now_rfc, pkg_md5, pkg_size, gz_md5, gz_size, pkg_sha256, pkg_size, gz_sha256, gz_size)
+now_rfc = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S UTC")
+release_content = (
+    "Origin: SujitKumarBharti Repo\n"
+    "Label: SujitKumarBharti Universal Linux Repository\n"
+    "Suite: stable\n"
+    "Codename: stable\n"
+    "Version: 1.0\n"
+    "Components: main\n"
+    "Architectures: amd64 arm64 all\n"
+    "Date: {}\n"
+    "MD5Sum:\n"
+    " {} {} Packages\n"
+    " {} {} Packages.gz\n"
+    "SHA256:\n"
+    " {} {} Packages\n"
+    " {} {} Packages.gz\n"
+).format(now_rfc, pkg_md5, pkg_size, gz_md5, gz_size, pkg_sha256, pkg_size, gz_sha256, gz_size)
 
-    with open(os.path.join(deb_dir, "Release"), "w") as f:
-        f.write(release_content)
-' "$deb_dir"
+with open(os.path.join(deb_dir, "Release"), "w") as f:
+    f.write(release_content)
+' "$deb_dir" "$REGISTRY_FILE"
 
     # Sign Release with GPG to generate InRelease and Release.gpg
     local gnupg_dir="$SCRIPT_DIR/keys/gnupg"
@@ -172,13 +197,14 @@ else:
         fi
     fi
 
-    # Delete physical file
+    # Delete file from git and local disk (handles sparse/cleaned files cleanly!)
     local abs_filepath="$SCRIPT_DIR/$filepath"
+    if [ -d "$SCRIPT_DIR/.git" ]; then
+        git rm --sparse -f "$filepath" 2>/dev/null || git rm -f "$filepath" 2>/dev/null || true
+    fi
     if [ -f "$abs_filepath" ]; then
         rm -f "$abs_filepath"
         echo -e "${GREEN}🗑️  Deleted package file: $abs_filepath${NC}"
-    else
-        echo -e "${YELLOW}File $abs_filepath was already removed or missing from disk.${NC}"
     fi
 
     # Remove from registry.json
@@ -213,7 +239,7 @@ with open(reg_file, "w") as f:
     echo ""
     echo -e "${YELLOW}${BOLD}🚀 NEXT STEP - PUSH TO GITHUB:${NC}"
     echo "Run these commands to apply the deletion online:"
-    echo -e "${CYAN}   git add .${NC}"
+    echo -e "${CYAN}   git add database/${NC}"
     echo -e "${CYAN}   git commit -m \"chore: delete $name v$ver from $os_type\"${NC}"
     echo -e "${CYAN}   git push${NC}"
     echo ""

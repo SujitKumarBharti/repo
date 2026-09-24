@@ -125,6 +125,19 @@ delete_package() {
     ensure_registry
     echo -e "${YELLOW}⚠️  Attempting to delete package: ${pkg_name}${NC}"
     
+    local rel_fpath
+    rel_fpath=$(python3 -c '
+import json, sys
+with open(sys.argv[1]) as f:
+    d = json.load(f)
+p = next((x for x in d.get("packages", []) if x["name"] == sys.argv[2]), None)
+print(p.get("filepath", "") if p else "")
+' "$REGISTRY_FILE" "$pkg_name")
+
+    if [ -n "$rel_fpath" ] && [ -d "$SCRIPT_DIR/.git" ]; then
+        git rm --sparse -f "$rel_fpath" 2>/dev/null || git rm -f "$rel_fpath" 2>/dev/null || true
+    fi
+
     python3 -c '
 import json, os, sys
 
@@ -157,7 +170,7 @@ print("Successfully removed \"{}\" from registry.".format(pkg_name))
     update_apt_repo
 
     echo -e "${GREEN}✅ Deletion complete. Remember to commit and push:${NC}"
-    echo "   git add ."
+    echo "   git add database/"
     echo "   git commit -m \"chore: removed $pkg_name\""
     echo "   git push"
 }
@@ -169,47 +182,72 @@ update_apt_repo() {
 
     echo -e "${BLUE}📦 Updating APT repository indexes (Packages, Packages.gz, Release)...${NC}"
     python3 -c '
-import os, hashlib, datetime, sys
+import os, hashlib, datetime, sys, json, gzip
 
 deb_dir = sys.argv[1]
-has_dpkg = os.system("which dpkg-scanpackages >/dev/null 2>&1") == 0
+reg_file = sys.argv[2]
 
-if has_dpkg:
-    os.system("cd {} && dpkg-scanpackages . /dev/null > Packages 2>/dev/null && gzip -k -f Packages".format(deb_dir))
+try:
+    with open(reg_file, "r") as f:
+        data = json.load(f)
+except Exception:
+    data = {"packages": []}
+
+packages = data.get("packages", [])
+stanzas = []
+
+for p in packages:
+    if p.get("os_type") == "debian":
+        control = p.get("control_info", "").strip()
+        fname = p.get("filename", "")
+        size = p.get("size", 0)
+        md5 = p.get("md5", "")
+        sha1 = p.get("sha1", "")
+        sha256 = p.get("sha256", "")
+
+        if control:
+            entry = f"{control}\nFilename: ./{fname}\nSize: {size}\nMD5sum: {md5}\nSHA1: {sha1}\nSHA256: {sha256}\n"
+            stanzas.append(entry)
+
+packages_content = "\n".join(stanzas) + ("\n" if stanzas else "")
 
 pkg_file = os.path.join(deb_dir, "Packages")
+with open(pkg_file, "w") as f:
+    f.write(packages_content)
+
 pkg_gz_file = os.path.join(deb_dir, "Packages.gz")
+with open(pkg_file, "rb") as f_in, gzip.open(pkg_gz_file, "wb") as f_out:
+    f_out.write(f_in.read())
 
-if os.path.isfile(pkg_file) and os.path.isfile(pkg_gz_file):
-    def get_hashes(filepath):
-        with open(filepath, "rb") as f:
-            data = f.read()
-        return len(data), hashlib.md5(data).hexdigest(), hashlib.sha256(data).hexdigest()
+def get_hashes(filepath):
+    with open(filepath, "rb") as f:
+        data = f.read()
+    return len(data), hashlib.md5(data).hexdigest(), hashlib.sha256(data).hexdigest()
 
-    pkg_size, pkg_md5, pkg_sha256 = get_hashes(pkg_file)
-    gz_size, gz_md5, gz_sha256 = get_hashes(pkg_gz_file)
+pkg_size, pkg_md5, pkg_sha256 = get_hashes(pkg_file)
+gz_size, gz_md5, gz_sha256 = get_hashes(pkg_gz_file)
 
-    now_rfc = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S UTC")
-    release_content = (
-        "Origin: SujitKumarBharti Repo\n"
-        "Label: SujitKumarBharti Universal Linux Repository\n"
-        "Suite: stable\n"
-        "Codename: stable\n"
-        "Version: 1.0\n"
-        "Components: main\n"
-        "Architectures: amd64 arm64 all\n"
-        "Date: {}\n"
-        "MD5Sum:\n"
-        " {} {} Packages\n"
-        " {} {} Packages.gz\n"
-        "SHA256:\n"
-        " {} {} Packages\n"
-        " {} {} Packages.gz\n"
-    ).format(now_rfc, pkg_md5, pkg_size, gz_md5, gz_size, pkg_sha256, pkg_size, gz_sha256, gz_size)
+now_rfc = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S UTC")
+release_content = (
+    "Origin: SujitKumarBharti Repo\n"
+    "Label: SujitKumarBharti Universal Linux Repository\n"
+    "Suite: stable\n"
+    "Codename: stable\n"
+    "Version: 1.0\n"
+    "Components: main\n"
+    "Architectures: amd64 arm64 all\n"
+    "Date: {}\n"
+    "MD5Sum:\n"
+    " {} {} Packages\n"
+    " {} {} Packages.gz\n"
+    "SHA256:\n"
+    " {} {} Packages\n"
+    " {} {} Packages.gz\n"
+).format(now_rfc, pkg_md5, pkg_size, gz_md5, gz_size, pkg_sha256, pkg_size, gz_sha256, gz_size)
 
-    with open(os.path.join(deb_dir, "Release"), "w") as f:
-        f.write(release_content)
-' "$deb_dir"
+with open(os.path.join(deb_dir, "Release"), "w") as f:
+    f.write(release_content)
+' "$deb_dir" "$REGISTRY_FILE"
 
     # Sign Release with GPG to generate InRelease and Release.gpg
     local gnupg_dir="$SCRIPT_DIR/keys/gnupg"
@@ -303,22 +341,52 @@ else:
     cp "$input_file" "$dest_path"
     chmod 644 "$dest_path"
 
-    # Compute SHA256 checksum
+    # Compute checksums, size, and metadata
     local sha256
-    sha256=$(sha256sum "$dest_path" | awk '{print $1}')
-
-    # Update registry.json
-    python3 -c '
-import json, datetime, sys
+    sha256=$(python3 -c '
+import os, hashlib, subprocess, tarfile, io, json, sys, datetime
 
 reg_file = sys.argv[1]
-name = sys.argv[2]
-ver = sys.argv[3]
-os_t = sys.argv[4]
-fname = sys.argv[5]
-fpath = sys.argv[6]
-sha = sys.argv[7]
+dest_path = sys.argv[2]
+name = sys.argv[3]
+ver = sys.argv[4]
+os_t = sys.argv[5]
+fname = sys.argv[6]
+fpath = sys.argv[7]
 desc = sys.argv[8]
+
+with open(dest_path, "rb") as f:
+    content = f.read()
+
+size = len(content)
+md5 = hashlib.md5(content).hexdigest()
+sha1 = hashlib.sha1(content).hexdigest()
+sha256 = hashlib.sha256(content).hexdigest()
+
+control_info = ""
+if os_t == "debian":
+    try:
+        control_info = subprocess.check_output(["dpkg-deb", "-f", dest_path], text=True)
+    except Exception:
+        try:
+            with open(dest_path, "rb") as f:
+                if f.read(8) == b"!<arch>\n":
+                    while True:
+                        h = f.read(60)
+                        if len(h) < 60: break
+                        fn = h[:16].strip().decode("ascii")
+                        fs = int(h[48:58].strip())
+                        fdata = f.read(fs)
+                        if fs % 2 == 1: f.read(1)
+                        if fn.startswith("control.tar"):
+                            tf = tarfile.open(fileobj=io.BytesIO(fdata))
+                            for m in tf.getmembers():
+                                if m.name.endswith("control") and not m.isdir():
+                                    extracted = tf.extractfile(m)
+                                    if extracted:
+                                        control_info = extracted.read().decode("utf-8", errors="replace")
+        except Exception:
+            pass
 
 with open(reg_file, "r") as f:
     data = json.load(f)
@@ -326,23 +394,31 @@ with open(reg_file, "r") as f:
 packages = [p for p in data.get("packages", []) if not (p["name"] == name and p.get("os_type") == os_t)]
 
 now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-packages.append({
+pkg_entry = {
     "name": name,
     "version": ver,
     "os_type": os_t,
     "filename": fname,
     "filepath": fpath,
-    "sha256": sha,
+    "sha256": sha256,
+    "size": size,
+    "md5": md5,
+    "sha1": sha1,
     "description": desc,
     "updated_at": now_iso
-})
+}
+if control_info:
+    pkg_entry["control_info"] = control_info
 
+packages.append(pkg_entry)
 data["packages"] = packages
 data["updated_at"] = now_iso
 
 with open(reg_file, "w") as f:
     json.dump(data, f, indent=2)
-' "$REGISTRY_FILE" "$pkg_name" "$pkg_version" "$os_type" "$dest_filename" "$rel_path" "$sha256" "$pkg_desc"
+
+print(sha256)
+' "$REGISTRY_FILE" "$dest_path" "$pkg_name" "$pkg_version" "$os_type" "$dest_filename" "$rel_path" "$pkg_desc")
 
     if [ "$os_type" == "debian" ]; then
         update_apt_repo
@@ -362,6 +438,11 @@ with open(reg_file, "w") as f:
     echo -e "${CYAN}   git add .${NC}"
     echo -e "${CYAN}   git commit -m \"feat: roll out $pkg_name v$pkg_version for $os_type\"${NC}"
     echo -e "${CYAN}   git push${NC}"
+    echo ""
+    echo -e "${YELLOW}${BOLD}💾 LOCAL DISK SPACE OPTIMIZATION:${NC}"
+    echo -e "To free up local PC disk space after pushing, you can run:"
+    echo -e "${CYAN}   ./clean_local.sh${NC}"
+    echo -e "This removes physical binaries from your PC while keeping them safe on GitHub!"
     echo ""
 }
 

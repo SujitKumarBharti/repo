@@ -151,6 +151,7 @@ except Exception:
 
 packages = data.get("packages", [])
 stanzas = []
+import re
 
 for p in packages:
     if p.get("os_type") == "debian":
@@ -162,6 +163,10 @@ for p in packages:
         sha256 = p.get("sha256", "")
 
         if control:
+            p_ver = str(p.get("version", ""))
+            p_name = str(p.get("name", ""))
+            control = re.sub(r"(?m)^Version:\s*.*$", "Version: " + p_ver, control)
+            control = re.sub(r"(?m)^Package:\s*.*$", "Package: " + p_name, control)
             entry = f"{control}\nFilename: ./{fname}\nSize: {size}\nMD5sum: {md5}\nSHA1: {sha1}\nSHA256: {sha256}\n"
             stanzas.append(entry)
 

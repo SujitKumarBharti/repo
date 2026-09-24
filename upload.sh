@@ -145,6 +145,7 @@ except Exception:
 
 packages = data.get("packages", [])
 stanzas = []
+import re
 
 for p in packages:
     if p.get("os_type") == "debian":
@@ -156,6 +157,10 @@ for p in packages:
         sha256 = p.get("sha256", "")
 
         if control:
+            p_ver = str(p.get("version", ""))
+            p_name = str(p.get("name", ""))
+            control = re.sub(r"(?m)^Version:\s*.*$", "Version: " + p_ver, control)
+            control = re.sub(r"(?m)^Package:\s*.*$", "Package: " + p_name, control)
             entry = f"{control}\nFilename: ./{fname}\nSize: {size}\nMD5sum: {md5}\nSHA1: {sha1}\nSHA256: {sha256}\n"
             stanzas.append(entry)
 
@@ -280,10 +285,13 @@ else:
             fi
         fi
 
-        # Remove old physical file if exists
-        if [ -n "$old_file" ] && [ -f "$SCRIPT_DIR/$old_file" ]; then
-            rm -f "$SCRIPT_DIR/$old_file"
-            echo -e "${GREEN}   🗑️  Old package file deleted.${NC}"
+        # Remove old physical file and git tracked file (works with sparse-checkout)
+        if [ -n "$old_file" ]; then
+            if [ -d "$SCRIPT_DIR/.git" ]; then
+                git rm --sparse -f "$old_file" 2>/dev/null || git rm -f "$old_file" 2>/dev/null || true
+            fi
+            rm -f "$SCRIPT_DIR/$old_file" 2>/dev/null || true
+            echo -e "${GREEN}   🗑️  Old package file removed from repository.${NC}"
         fi
     fi
 
@@ -291,10 +299,36 @@ else:
     cp "$input_file" "$dest_path"
     chmod 644 "$dest_path"
 
+    # Synchronize internal deb control version if Debian package
+    if [ "$os_type" == "debian" ]; then
+        if command -v dpkg-deb >/dev/null 2>&1; then
+            local deb_internal_ver
+            deb_internal_ver=$(dpkg-deb -f "$dest_path" Version 2>/dev/null || echo "")
+            local deb_internal_pkg
+            deb_internal_pkg=$(dpkg-deb -f "$dest_path" Package 2>/dev/null || echo "")
+
+            if [ -n "$deb_internal_ver" ] && [ "$deb_internal_ver" != "$pkg_version" ]; then
+                echo -e "${YELLOW}⚙️  Syncing internal DEBIAN/control Version ($deb_internal_ver -> $pkg_version)...${NC}"
+                local tmp_deb_dir
+                tmp_deb_dir=$(mktemp -d)
+                dpkg-deb -R "$dest_path" "$tmp_deb_dir/pkg" >/dev/null 2>&1
+                if [ -f "$tmp_deb_dir/pkg/DEBIAN/control" ]; then
+                    sed -i -E "s/^(Version:).*/\1 $pkg_version/" "$tmp_deb_dir/pkg/DEBIAN/control"
+                    if [ -n "$pkg_name" ]; then
+                        sed -i -E "s/^(Package:).*/\1 $pkg_name/" "$tmp_deb_dir/pkg/DEBIAN/control"
+                    fi
+                    dpkg-deb --root-owner-group -b "$tmp_deb_dir/pkg" "$dest_path" >/dev/null 2>&1
+                    echo -e "${GREEN}   ✔ Internal package Version successfully synchronized to $pkg_version!${NC}"
+                fi
+                rm -rf "$tmp_deb_dir"
+            fi
+        fi
+    fi
+
     # Compute checksums, size, and metadata
     local sha256
     sha256=$(python3 -c '
-import os, hashlib, subprocess, tarfile, io, json, sys, datetime
+import os, hashlib, subprocess, tarfile, io, json, sys, datetime, re
 
 reg_file = sys.argv[1]
 dest_path = sys.argv[2]
@@ -358,6 +392,8 @@ pkg_entry = {
     "updated_at": now_iso
 }
 if control_info:
+    control_info = re.sub(r"(?m)^Version:\s*.*$", f"Version: {ver}", control_info)
+    control_info = re.sub(r"(?m)^Package:\s*.*$", f"Package: {name}", control_info)
     pkg_entry["control_info"] = control_info
 
 packages.append(pkg_entry)
@@ -418,11 +454,64 @@ interactive_wizard() {
         fi
     done
 
+    # Auto-detect file attributes
+    local base_fname=$(basename "$input_file")
+    local ext="${base_fname##*.}"
+    local detected_os=""
+    local detected_name=""
+    local detected_ver=""
+    local detected_desc=""
+
+    case "$ext" in
+        deb)
+            detected_os="debian"
+            if command -v dpkg-deb >/dev/null 2>&1; then
+                detected_name=$(dpkg-deb -f "$input_file" Package 2>/dev/null || echo "")
+                detected_ver=$(dpkg-deb -f "$input_file" Version 2>/dev/null || echo "")
+                detected_desc=$(dpkg-deb -f "$input_file" Description 2>/dev/null | head -n 1 || echo "")
+            fi
+            ;;
+        rpm)
+            detected_os="fedora"
+            if command -v rpm >/dev/null 2>&1; then
+                detected_name=$(rpm -qp --qf "%{NAME}" "$input_file" 2>/dev/null || echo "")
+                detected_ver=$(rpm -qp --qf "%{VERSION}" "$input_file" 2>/dev/null || echo "")
+                detected_desc=$(rpm -qp --qf "%{SUMMARY}" "$input_file" 2>/dev/null || echo "")
+            fi
+            ;;
+        zst|xz)
+            if [[ "$base_fname" == *".pkg.tar."* ]]; then
+                detected_os="arch"
+            fi
+            ;;
+        AppImage|run|bin)
+            detected_os="universal"
+            ;;
+    esac
+
+    # Filename fallback for name & version
+    local file_name_guess=$(echo "$base_fname" | cut -d_ -f1 | cut -d- -f1)
+    local file_ver_guess=$(echo "$base_fname" | grep -oP '(?<=_)[0-9]+(\.[0-9]+)+([a-zA-Z0-9.-]*)' | head -n 1 || echo "")
+
+    local default_name="${detected_name:-$file_name_guess}"
+    local default_ver="${detected_ver:-$file_ver_guess}"
+    default_ver="${default_ver:-1.0.0}"
+
+    # If filename has a different version than internal control, inform the user!
+    if [ -n "$file_ver_guess" ] && [ -n "$detected_ver" ] && [ "$file_ver_guess" != "$detected_ver" ]; then
+        echo -e "   ${YELLOW}ℹ️  Notice: Package internal DEBIAN/control has Version '${BOLD}$detected_ver${NC}${YELLOW}', but filename indicates '${BOLD}$file_ver_guess${NC}${YELLOW}'.${NC}"
+        default_ver="$file_ver_guess"
+    fi
+
     # Step 2: Package Name
     local pkg_name=""
-    local suggested_name=$(basename "$input_file" | cut -d_ -f1 | cut -d- -f1)
     while [ -z "$pkg_name" ]; do
-        read -p "📦 Step 2/5: Enter package name (e.g. omen-gaming-hub): " pkg_name
+        if [ -n "$default_name" ]; then
+            read -p "📦 Step 2/5: Enter package name [$default_name]: " pkg_name
+            pkg_name="${pkg_name:-$default_name}"
+        else
+            read -p "📦 Step 2/5: Enter package name (e.g. omen-gaming-hub): " pkg_name
+        fi
         pkg_name=$(echo "$pkg_name" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9._-')
         if [ -z "$pkg_name" ]; then
             echo -e "${RED}   Package name is required! (letters, numbers, dashes, dots)${NC}"
@@ -432,7 +521,12 @@ interactive_wizard() {
     # Step 3: Version
     local pkg_version=""
     while [ -z "$pkg_version" ]; do
-        read -p "🔖 Step 3/5: Enter package version (e.g. 1.0.0): " pkg_version
+        if [ -n "$default_ver" ]; then
+            read -p "🔖 Step 3/5: Enter package version [$default_ver]: " pkg_version
+            pkg_version="${pkg_version:-$default_ver}"
+        else
+            read -p "🔖 Step 3/5: Enter package version (e.g. 1.0.0): " pkg_version
+        fi
         if [ -z "$pkg_version" ]; then
             echo -e "${RED}   Version is required!${NC}"
         fi
@@ -440,30 +534,54 @@ interactive_wizard() {
 
     # Step 4: Target OS
     echo ""
-    echo -e "${BLUE}${BOLD}🐧 Step 4/5: Select Target Linux Distribution / Type:${NC}"
-    echo "   1) Ubuntu / Kali / Debian / Linux Mint / Pop!_OS (.deb)"
-    echo "   2) Fedora / RHEL / CentOS / Rocky Linux (.rpm)"
-    echo "   3) Arch Linux / Manjaro / EndeavourOS (.pkg.tar.zst)"
-    echo "   4) Universal (AppImage / Standalone Binary / Script - works on ALL distros)"
-    
     local os_type=""
-    while [ -z "$os_type" ]; do
-        read -p "   Select option [1-4]: " os_choice
+    if [ -n "$detected_os" ]; then
+        echo -e "${BLUE}${BOLD}🐧 Step 4/5: Target Distribution auto-detected: ${GREEN}$detected_os${NC}"
+        echo "   1) Ubuntu / Kali / Debian / Linux Mint / Pop!_OS (.deb)"
+        echo "   2) Fedora / RHEL / CentOS / Rocky Linux (.rpm)"
+        echo "   3) Arch Linux / Manjaro / EndeavourOS (.pkg.tar.zst)"
+        echo "   4) Universal (AppImage / Standalone Binary / Script - works on ALL distros)"
+        
+        local default_os_num=1
+        case "$detected_os" in
+            debian) default_os_num=1 ;;
+            fedora) default_os_num=2 ;;
+            arch) default_os_num=3 ;;
+            universal) default_os_num=4 ;;
+        esac
+
+        read -p "   Confirm target OS option [$default_os_num]: " os_choice
+        os_choice="${os_choice:-$default_os_num}"
         case "$os_choice" in
             1) os_type="debian" ;;
             2) os_type="fedora" ;;
             3) os_type="arch" ;;
             4) os_type="universal" ;;
-            *) echo -e "${RED}   Invalid selection. Choose 1, 2, 3, or 4.${NC}" ;;
+            *) os_type="$detected_os" ;;
         esac
-    done
+    else
+        echo -e "${BLUE}${BOLD}🐧 Step 4/5: Select Target Linux Distribution / Type:${NC}"
+        echo "   1) Ubuntu / Kali / Debian / Linux Mint / Pop!_OS (.deb)"
+        echo "   2) Fedora / RHEL / CentOS / Rocky Linux (.rpm)"
+        echo "   3) Arch Linux / Manjaro / EndeavourOS (.pkg.tar.zst)"
+        echo "   4) Universal (AppImage / Standalone Binary / Script - works on ALL distros)"
+        while [ -z "$os_type" ]; do
+            read -p "   Select option [1-4]: " os_choice
+            case "$os_choice" in
+                1) os_type="debian" ;;
+                2) os_type="fedora" ;;
+                3) os_type="arch" ;;
+                4) os_type="universal" ;;
+                *) echo -e "${RED}   Invalid selection. Choose 1, 2, 3, or 4.${NC}" ;;
+            esac
+        done
+    fi
 
     # Step 5: Description
     echo ""
-    read -p "📝 Step 5/5: Enter short description: " pkg_desc
-    if [ -z "$pkg_desc" ]; then
-        pkg_desc="$pkg_name package for Linux"
-    fi
+    local default_desc="${detected_desc:-$pkg_name package for Linux}"
+    read -p "📝 Step 5/5: Enter short description [$default_desc]: " pkg_desc
+    pkg_desc="${pkg_desc:-$default_desc}"
 
     echo ""
     process_upload "$input_file" "$pkg_name" "$pkg_version" "$os_type" "$pkg_desc" "false"

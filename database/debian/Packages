@@ -13,18 +13,3 @@ MD5sum: 08c4537d24eedba84bbb61e07f935c08
 SHA1: ca5130abaf835b7bd7cb8a359a3f75ba9682e29a
 SHA256: 948ae539c5b81c82b6e714a0313b6a66ec661a7de2509ee80ee6871fcc3113be
 
-Package: kali-login-wallpaper
-Version: 2.0.0
-Section: admin
-Priority: optional
-Architecture: all
-Depends: python3, python3-gi, gir1.2-gtk-4.0, python3-pil, librsvg2-bin
-Maintainer: Bsilent
-Description: Kali Linux GDM login wallpaper changer
- GTK4 utility to select, crop, apply and restore the Kali Linux GDM login background.
-Filename: ./kali-login-wallpaper_2.0.0.deb
-Size: 3940
-MD5sum: e7cdf6934a6f443fa222dcfa5adf8bbb
-SHA1: 2fde32839cf2e153127db9331b35803624cf246e
-SHA256: 7d1e9c4707eeddfc3abf834081190bc418e98d1804ab516a5e6a3d6c769bbcde
-

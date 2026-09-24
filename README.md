@@ -63,93 +63,119 @@ sudo pacman -S <package>
 
 ---
 
-## 📦 Maintainer Guide (How to Upload & Roll Out Packages)
+## 📦 Maintainer Guide (Step-by-Step with `omengaminghub` Example)
 
-### 1. Interactive Upload Wizard
-To upload a package and roll out updates, run:
-
+Suppose you have built or downloaded a package on your machine, for example:
 ```bash
-./upload.sh -u
-```
-*(or simply `./upload.sh`)*
-
-1. **📁 File location**: Path to the package (e.g. `~/Downloads/package.deb`).
-2. **📦 Package name**: Unique package identifier (e.g. `omengaminghub`).
-3. **🔖 Version**: Version number (e.g. `0.1.1`).
-4. **🐧 Target OS**: Choose target system:
-   - `1) Ubuntu / Kali / Debian / Mint (.deb)`
-   - `2) Fedora / RHEL / CentOS (.rpm)`
-   - `3) Arch Linux / Manjaro (.pkg.tar.zst)`
-   - `4) Universal / Other`
-5. **📝 Description**: Short description of the package.
-
-#### 🔄 Automatic Rollouts:
-If a package with the same name already exists in that category:
-- `upload.sh` detects the existing version.
-- Prompts for confirmation to roll out the update.
-- Deletes the obsolete file from disk.
-- Places the new package file, regenerates the native repository indexes (`Packages`, `Packages.gz`, `Release`), and updates `database/registry.json`.
-
----
-
-### 2. Interactive Delete Manager (`delete.sh`)
-To safely remove a package from the repository:
-
-```bash
-./delete.sh
-```
-
-- Shows a clean numbered list of all packages in the repository.
-- Type the number (e.g. `1`) or the package name to delete.
-- Asks for confirmation before deleting.
-- Automatically cleans up the physical file, updates `registry.json`, and regenerates the repository indexes (`Packages`, `Packages.gz`, `Release`).
-
-Or delete directly via command:
-```bash
-./delete.sh omengaminghub
+~/Downloads/omengaminghub_0.1.1_amd64.deb
 ```
 
 ---
 
-### 3. Free Up Local Disk Space (`delete.sh -c`)
-To keep your local PC disk clean while keeping all packages safely hosted on GitHub:
+### 1️⃣ How to Upload or Roll Out an Update (`upload.sh`)
+
+#### Option A: Interactive Wizard (Recommended)
+Run the upload wizard from the repository root:
+```bash
+./upload.sh
+```
+Follow the 5 simple prompts:
+1. **📁 File location**: `~/Downloads/omengaminghub_0.1.1_amd64.deb`
+2. **📦 Package name**: `omengaminghub`
+3. **🔖 Version**: `0.1.1` *(or `0.1.2` when rolling out a new update)*
+4. **🐧 Target OS**: Choose `1) Ubuntu / Kali / Debian / Mint (.deb)`
+5. **📝 Description**: `HP Omen Gaming Hub for Linux`
+
+#### 🔄 Automatic Rollouts (Updating an Existing Package):
+If `omengaminghub` already exists in the repository:
+- `upload.sh` automatically detects the previous version (e.g. `0.1.1`).
+- Prompts for confirmation to roll out the update (e.g. `0.1.2`).
+- Safely replaces the old file, recalculates checksums, updates `database/registry.json`, and rebuilds APT indexes (`Packages`, `Packages.gz`, `Release`, GPG signatures).
+
+#### Option B: Direct One-Line Command (CLI Flags)
+```bash
+./upload.sh -f ~/Downloads/omengaminghub_0.1.1_amd64.deb -n omengaminghub -v 0.1.1 -o debian -d "HP Omen Gaming Hub for Linux"
+```
+
+#### 🚀 Push to GitHub & Auto Clean Local Disk:
+At the end of upload, the wizard will ask:
+```text
+🚀 Push to GitHub & automatically clean local disk space now? [y/N]: y
+```
+- Press **`y`**: Automatically commits and pushes to GitHub, then immediately frees the local disk space using sparse-checkout!
+- Or push manually in terminal:
+  ```bash
+  git add database/
+  git commit -m "feat: roll out omengaminghub"
+  git push
+  ```
+
+---
+
+### 2️⃣ How to Free Up Local PC Disk Space (`delete.sh -c`)
+
+If you have uploaded packages and want to keep your local PC disk completely clean (0 MB used by packages), run:
 
 ```bash
 ./delete.sh -c
 ```
-*(Or launch `./delete.sh` and select option `[c]`)*
+*(Or launch `./delete.sh` and type `c`)*
 
-- Cleans heavy package binaries (`.deb`, `.rpm`, `.pkg.tar.zst`) from your local disk using Git Sparse-Checkout.
-- Saves 100% of your local disk space (packages remain hosted on GitHub for end-users).
-- Future git commits will **NEVER** accidentally delete packages from GitHub.
-- Check local disk vs GitHub repository status anytime:
+#### 💡 How it works & why it is safe:
+- Uses **Git Sparse-Checkout** to remove the physical `.deb` / `.rpm` binaries from your local PC.
+- **Your local PC saves 100% of the disk space.**
+- The packages remain **100% safe and hosted on GitHub** for all Linux users to install.
+- Future git commits will **NEVER** accidentally delete packages from GitHub!
+- Check local storage vs online package status anytime:
   ```bash
   ./delete.sh -s
   ```
 
 ---
 
-### 4. Fresh Setup on a New PC (Lightweight Clone)
-When cloning the repository on a new machine or after a clean PC reset, you do **not** need to download gigabytes of past packages:
+### 3️⃣ How to Permanently Delete a Package from GitHub (`delete.sh`)
 
+When you want to **permanently remove a hosted software from GitHub and the repository**:
+
+#### Option A: Interactive Delete Menu
+Run:
 ```bash
-git clone --filter=blob:none https://github.com/SujitKumarBharti/repo.git
-cd repo
-./delete.sh -c
+./delete.sh
 ```
-This clones only the scripts, metadata, and database registry in seconds without downloading heavy package binaries!
+You will see the list of all hosted packages:
+```text
+  [#]   NAME                    VERSION    DISTRO       FILENAME
+  ----------------------------------------------------------------------------------
+  [1]   omengaminghub           0.1.1      debian       omengaminghub_0.1.1.deb
+```
+1. Type `1` (or `omengaminghub`) and press **Enter**.
+2. Confirm deletion (`y`).
+3. Press `y` when asked: `🚀 Push deletion to GitHub now? [y/N]: y`
+4. The package is permanently removed from Git, `database/registry.json`, and APT indexes online!
+
+#### Option B: Direct Command
+```bash
+./delete.sh omengaminghub
+git push
+```
 
 ---
 
-### 5. Publishing Changes to GitHub
+### 4️⃣ How to Fresh Setup on a New PC (Lightweight Clone)
 
-After uploading, updating, or deleting any package, push the repository live:
+If your PC crashes or you clone this repository on a new computer, you do **not** need to download gigabytes of heavy packages:
 
 ```bash
-git add database/
-git commit -m "update repository packages"
-git push
+# 1. Clone without downloading heavy binaries:
+git clone --filter=blob:none https://github.com/SujitKumarBharti/repo.git
+
+# 2. Enter repository and set clean local workspace:
+cd repo
+./delete.sh -c
 ```
+- Clones in 2 seconds (< 1 MB).
+- Downloads only scripts, documentation, and the `registry.json` database.
+- You can immediately start uploading or managing packages fresh!
 
 ---
 

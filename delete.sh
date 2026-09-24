@@ -325,11 +325,26 @@ with open(reg_file, "w") as f:
     echo -e "${GREEN}${BOLD}🎉 SUCCESS! Package '$name' deleted from repository.${NC}"
     echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${NC}"
     echo ""
-    echo -e "${YELLOW}${BOLD}🚀 NEXT STEP - PUSH TO GITHUB:${NC}"
-    echo "Run these commands to apply the deletion online:"
-    echo -e "${CYAN}   git add database/${NC}"
-    echo -e "${CYAN}   git commit -m \"chore: delete $name v$ver from $os_type\"${NC}"
-    echo -e "${CYAN}   git push${NC}"
+    read -p "🚀 Push deletion to GitHub now? [y/N]: " auto_push_delete
+    if [[ "$auto_push_delete" =~ ^[Yy]$ ]]; then
+        echo -e "${BLUE}📦 Staging and committing deletion...${NC}"
+        git add database/
+        git commit -m "chore: delete $name v$ver from $os_type" || true
+        echo -e "${BLUE}🚀 Pushing to GitHub...${NC}"
+        if git push; then
+            echo -e "${GREEN}${BOLD}🎉 SUCCESS! Package '$name' permanently deleted from GitHub! ✨${NC}"
+        else
+            echo -e "${YELLOW}⚠️ Git push was not completed (e.g. requires terminal credentials).${NC}"
+            echo -e "You can apply the deletion online manually by running: ${CYAN}git push${NC}"
+        fi
+    else
+        echo ""
+        echo -e "${YELLOW}${BOLD}🚀 NEXT STEP - PUSH TO GITHUB:${NC}"
+        echo "Run these commands to apply the deletion online:"
+        echo -e "${CYAN}   git add database/${NC}"
+        echo -e "${CYAN}   git commit -m \"chore: delete $name v$ver from $os_type\"${NC}"
+        echo -e "${CYAN}   git push${NC}"
+    fi
     echo ""
 }
 

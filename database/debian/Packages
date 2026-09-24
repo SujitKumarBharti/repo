@@ -13,3 +13,18 @@ MD5sum: ebf6f5f4130720b969c99f56e5dc6e39
 SHA1: 1385d9d9b488a6f0dfd0b8220283cc0ed9428e63
 SHA256: 4d94d2988c8bcb889e44c0df626da9ad635c9d7f6be1363a8b3ebbf337e70541
 
+Package: omengaminghub
+Version: 0.1.1
+Architecture: amd64
+Installed-Size: 13789
+Maintainer: Bsilent
+Priority: optional
+Depends: libwebkit2gtk-4.1-0, libgtk-3-0
+Description: OMEN-style fan and performance control for Linux using NBFC
+ A Linux desktop dashboard for monitoring and independently controlling laptop fans through NBFC-Linux.
+Filename: ./omengaminghub_0.1.1.deb
+Size: 3962062
+MD5sum: 08c4537d24eedba84bbb61e07f935c08
+SHA1: ca5130abaf835b7bd7cb8a359a3f75ba9682e29a
+SHA256: 948ae539c5b81c82b6e714a0313b6a66ec661a7de2509ee80ee6871fcc3113be
+

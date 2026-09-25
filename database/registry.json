@@ -1,7 +1,7 @@
 {
   "repository": "SujitKumarBharti/repo",
   "base_url": "https://sujitkumarbharti.github.io/repo",
-  "updated_at": "2026-09-25T12:02:28.587066+00:00",
+  "updated_at": "2026-09-25T18:22:02.809776+00:00",
   "packages": [
     {
       "name": "omengaminghub",
@@ -33,21 +33,21 @@
     },
     {
       "name": "burpsuite-pro",
-      "version": "2026.3.3-1",
+      "version": "2026.4.0.0-1",
       "os_type": "debian",
-      "filename": "burpsuite-pro_2026.3.3-1.deb",
-      "filepath": "database/debian/burpsuite-pro_2026.3.3-1.deb",
-      "sha256": "1274df337d15e4b6a0c02382e1c96ef0c424edc6821e059aad7e86648b30ff34",
-      "size": 3312,
-      "md5": "b9316291470ea9e22f7b11efabdff8d4",
-      "sha1": "1a9e58d7eabe549e2b00cb9276be90a0e3f41aa2",
+      "filename": "burpsuite-pro_2026.4.0.0-1.deb",
+      "filepath": "database/debian/burpsuite-pro_2026.4.0.0-1.deb",
+      "sha256": "bd6de5e89bfacf2ff6ef7bd112497e6275ac633b512dac1ca8d9bea0361b17a1",
+      "size": 3460,
+      "md5": "89c0ac5863a944304648a6c4251c274a",
+      "sha1": "f9c44823d4ffb425dcd7febd4b1f0fc8649beecc",
       "description": "Burp Suite Professional Edition",
-      "updated_at": "2026-09-25T12:02:28.587066+00:00",
+      "updated_at": "2026-09-25T18:22:02.809776+00:00",
       "is_remote": true,
-      "remote_url": "https://jharkhand.duckdns.org/repo/burpsuite-pro_2026.3.3-1_amd64.deb",
-      "original_size": 678136810,
-      "original_sha256": "921f2f1ad32a472a6e094d7bb1274bf0b73ed7c2ba33931f82a913d204c03ef4",
-      "control_info": "Package: burpsuite-pro\nVersion: 2026.3.3-1\nSection: net\nPriority: optional\nArchitecture: amd64\nInstalled-Size: 676084\nMaintainer: bsilent <bsilent@localhost>\nDepends: curl | wget, ca-certificates, openjdk-21-jre | openjdk-21-jdk\nRecommends: libxrender1, libxtst6, libxi6\nHomepage: https://portswigger.net/burp\nDescription: Burp Suite Professional Edition\n An integrated platform and graphical tool for performing security testing\n of web applications.\n .\n This package includes:\n  - Burp Suite Professional (v2026)\n  - Burp Loader & Key Generator utility\n  - Desktop integration with application icons\n  - Dedicated 'burpsuite-pro' launcher with Java 21 auto-detection\n  - Built-in '-generatekey' command option\n"
+      "remote_url": "https://drive.google.com/file/d/1d1erCEzsCfidqVH1Zhcyn5KHLUiOSNvn/view?usp=sharing",
+      "original_size": 678274636,
+      "original_sha256": "126e58559b0530606d2c33bce74df9f524f46f6156363168941d94fc2c806d93",
+      "control_info": "Package: burpsuite-pro\nVersion: 2026.4.0.0-1\nSection: net\nPriority: optional\nArchitecture: amd64\nInstalled-Size: 676156\nMaintainer: bsilent <bsilent@localhost>\nDepends: curl | wget, ca-certificates, openjdk-21-jre | openjdk-21-jdk\nRecommends: libxrender1, libxtst6, libxi6\nHomepage: https://portswigger.net/burp\nDescription: Burp Suite Professional Edition\n An integrated platform and graphical tool for performing security testing\n of web applications.\n .\n This package includes:\n  - Burp Suite Professional (v2026.4.0.0)\n  - Burp Loader & Key Generator utility\n  - Desktop integration with application icons\n  - Dedicated 'burpsuite-pro' launcher with Java 21 auto-detection\n  - Built-in '-generatekey' command option\n"
     }
   ]
 }

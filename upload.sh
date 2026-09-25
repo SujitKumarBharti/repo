@@ -50,12 +50,14 @@ show_help() {
     echo "  -v, --version <version>    Package version (e.g. 1.0.0)"
     echo "  -o, --os <os_type>         Target OS: debian, fedora, arch, or universal"
     echo "  -d, --desc <description>   Package description"
+    echo "  -m, --remote-url <url>     Remote download URL for packages > 100MB (domain or IP)"
     echo "  -r, --replace              Force replace existing package without prompting"
     echo ""
     echo -e "${BOLD}EXAMPLES:${NC}"
     echo "  ./upload.sh -u                                       # Interactive wizard"
     echo "  ./upload.sh -l                                       # List all packages"
     echo "  ./upload.sh -f ./app.deb -n myapp -v 1.0 -o debian   # Direct upload"
+    echo "  ./upload.sh -f ./big.deb -n myapp -v 1.0 -o debian -m https://jharkhand.duckdns.org/repo/big.deb"
     echo "  ./upload.sh --delete myapp                           # Remove package"
     echo ""
 }
@@ -83,14 +85,16 @@ if not packages:
     print("  (No packages uploaded yet. Run ./upload.sh -u to upload your first package!)")
     sys.exit(0)
 
-print("  {:<24} {:<10} {:<15} {:<30}".format("NAME", "VERSION", "TARGET OS", "FILENAME"))
-print("  " + "-"*80)
+print("  {:<22} {:<10} {:<12} {:<30} {:<10}".format("NAME", "VERSION", "TARGET OS", "FILENAME", "STORAGE"))
+print("  " + "-"*88)
 for p in packages:
     name = p["name"]
     ver = p.get("version", "-")
     os_t = p.get("os_type", "-")
     fname = p.get("filename", "-")
-    print("  {:<24} {:<10} {:<15} {:<30}".format(name, ver, os_t, fname))
+    is_rem = p.get("is_remote", False)
+    storage = "REMOTE" if is_rem else "GITHUB"
+    print("  {:<22} {:<10} {:<12} {:<30} {:<10}".format(name, ver, os_t, fname, storage))
 print("\nTotal packages: {}".format(len(packages)))
 ' "$REGISTRY_FILE"
 }
@@ -113,8 +117,12 @@ if not matches:
     print("  No packages found matching query.")
 else:
     for p in matches:
-        print("  • {} (v{}) [{}]".format(p["name"], p.get("version", "-"), p.get("os_type", "-")))
+        is_rem = p.get("is_remote", False)
+        mode = " [REMOTE PAYLOAD]" if is_rem else ""
+        print("  • {} (v{}) [{}]{}".format(p["name"], p.get("version", "-"), p.get("os_type", "-"), mode))
         print("    File: {}".format(p.get("filename", "-")))
+        if is_rem:
+            print("    Remote URL: {}".format(p.get("remote_url", "-")))
         print("    Desc: {}\n".format(p.get("description", "-")))
 ' "$REGISTRY_FILE" "$query"
 }
@@ -133,6 +141,7 @@ update_apt_repo() {
     echo -e "${BLUE}📦 Updating APT repository indexes (Packages, Packages.gz, Release)...${NC}"
     python3 -c '
 import os, hashlib, datetime, sys, json, gzip
+import re
 
 deb_dir = sys.argv[1]
 reg_file = sys.argv[2]
@@ -145,7 +154,6 @@ except Exception:
 
 packages = data.get("packages", [])
 stanzas = []
-import re
 
 for p in packages:
     if p.get("os_type") == "debian":
@@ -221,6 +229,7 @@ process_upload() {
     local os_type="$4"
     local pkg_desc="$5"
     local force_replace="$6"
+    local remote_url="$7"
 
     # Expand tilde if present
     input_file="${input_file/#\~/$HOME}"
@@ -250,6 +259,42 @@ process_upload() {
     fi
     local dest_path="$target_folder/$dest_filename"
     local rel_path="database/$os_type/$dest_filename"
+
+    # File size verification for GitHub 100 MB Limit
+    local file_size
+    file_size=$(stat -c%s "$input_file" 2>/dev/null || wc -c < "$input_file")
+    local max_allowed=$((100 * 1024 * 1024)) # 100 MB
+    local is_remote="false"
+
+    if [ "$file_size" -gt "$max_allowed" ] || [ -n "$remote_url" ]; then
+        is_remote="true"
+        if [ -z "$remote_url" ]; then
+            local size_mb
+            size_mb=$(python3 -c "import sys; print('{:.2f}'.format(float(sys.argv[1]) / (1024*1024)))" "$file_size")
+            echo ""
+            echo -e "${YELLOW}${BOLD}⚠️  PACKAGE FILE EXCEEDS GITHUB 100 MB LIMIT (${size_mb} MB):${NC}"
+            echo -e "${YELLOW}   GitHub strictly blocks commits containing files larger than 100 MB.${NC}"
+            echo -e "${CYAN}   Please specify the remote download location (domain or IP).${NC}"
+            echo -e "${CYAN}   Example: https://jharkhand.duckdns.org/repo/burpsuite-pro_2026.3.3-1_amd64.deb${NC}"
+            echo -e "${CYAN}            http://192.168.1.100/repo/burpsuite-pro_2026.3.3-1_amd64.deb${NC}"
+            read -p "🌐 Enter remote download URL (domain or IP): " remote_url
+            remote_url=$(echo "$remote_url" | xargs)
+            if [ -z "$remote_url" ]; then
+                echo -e "${RED}❌ Error: Remote download URL is mandatory for packages exceeding 100 MB.${NC}"
+                exit 1
+            fi
+        fi
+
+        # Auto-normalize URL protocol if missing
+        if [[ ! "$remote_url" =~ ^https?:// ]]; then
+            if [[ "$remote_url" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+                remote_url="http://$remote_url"
+            else
+                remote_url="https://$remote_url"
+            fi
+            echo -e "${BLUE}Normalized remote URL -> ${BOLD}$remote_url${NC}"
+        fi
+    fi
 
     ensure_registry
 
@@ -285,7 +330,7 @@ else:
             fi
         fi
 
-        # Remove old physical file and git tracked file (works with sparse-checkout)
+        # Remove old physical file and git tracked file
         if [ -n "$old_file" ]; then
             if [ -d "$SCRIPT_DIR/.git" ]; then
                 git rm --sparse -f "$old_file" 2>/dev/null || git rm -f "$old_file" 2>/dev/null || true
@@ -295,37 +340,218 @@ else:
         fi
     fi
 
-    # Copy new file into database
-    cp "$input_file" "$dest_path"
-    chmod 644 "$dest_path"
+    local orig_size=$file_size
+    local orig_sha256
+    orig_sha256=$(sha256sum "$input_file" | awk '{print $1}')
+    local orig_md5
+    orig_md5=$(md5sum "$input_file" | awk '{print $1}')
+    local orig_sha1
+    orig_sha1=$(sha1sum "$input_file" | awk '{print $1}')
 
-    # Synchronize internal deb control version if Debian package
-    if [ "$os_type" == "debian" ]; then
-        if command -v dpkg-deb >/dev/null 2>&1; then
-            local deb_internal_ver
-            deb_internal_ver=$(dpkg-deb -f "$dest_path" Version 2>/dev/null || echo "")
-            local deb_internal_pkg
-            deb_internal_pkg=$(dpkg-deb -f "$dest_path" Package 2>/dev/null || echo "")
+    # Process and build repository package
+    if [ "$is_remote" == "true" ]; then
+        if [ "$os_type" == "debian" ]; then
+            echo -e "${BLUE}⚙️  Generating lightweight payload-fetcher wrapper (.deb) package...${NC}"
+            local tmp_build_dir
+            tmp_build_dir=$(mktemp -d)
+            mkdir -p "$tmp_build_dir/DEBIAN"
 
-            if [ -n "$deb_internal_ver" ] && [ "$deb_internal_ver" != "$pkg_version" ]; then
-                echo -e "${YELLOW}⚙️  Syncing internal DEBIAN/control Version ($deb_internal_ver -> $pkg_version)...${NC}"
-                local tmp_deb_dir
-                tmp_deb_dir=$(mktemp -d)
-                dpkg-deb -R "$dest_path" "$tmp_deb_dir/pkg" >/dev/null 2>&1
-                if [ -f "$tmp_deb_dir/pkg/DEBIAN/control" ]; then
-                    sed -i -E "s/^(Version:).*/\1 $pkg_version/" "$tmp_deb_dir/pkg/DEBIAN/control"
-                    if [ -n "$pkg_name" ]; then
-                        sed -i -E "s/^(Package:).*/\1 $pkg_name/" "$tmp_deb_dir/pkg/DEBIAN/control"
-                    fi
-                    dpkg-deb --root-owner-group -b "$tmp_deb_dir/pkg" "$dest_path" >/dev/null 2>&1
-                    echo -e "${GREEN}   ✔ Internal package Version successfully synchronized to $pkg_version!${NC}"
+            # Extract control and maintainer scripts from input deb
+            dpkg-deb -e "$input_file" "$tmp_build_dir/DEBIAN" 2>/dev/null || true
+
+            local ctrl_file="$tmp_build_dir/DEBIAN/control"
+            if [ ! -f "$ctrl_file" ]; then
+                cat << EOF > "$ctrl_file"
+Package: $pkg_name
+Version: $pkg_version
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: Repository Maintainer
+Description: $pkg_desc
+EOF
+            fi
+
+            # Synchronize Package and Version in control
+            sed -i -E "s/^(Package:).*/\1 $pkg_name/" "$ctrl_file"
+            sed -i -E "s/^(Version:).*/\1 $pkg_version/" "$ctrl_file"
+
+            # Ensure Depends includes curl | wget, ca-certificates
+            if grep -q "^Depends:" "$ctrl_file"; then
+                if ! grep -q "curl" "$ctrl_file" && ! grep -q "wget" "$ctrl_file"; then
+                    sed -i -E 's/^(Depends:\s*)(.*)/\1curl | wget, ca-certificates, \2/' "$ctrl_file"
                 fi
-                rm -rf "$tmp_deb_dir"
+            else
+                echo "Depends: curl | wget, ca-certificates" >> "$ctrl_file"
+            fi
+
+            # If original postinst exists, preserve it so wrapper executes it after payload extraction
+            if [ -f "$tmp_build_dir/DEBIAN/postinst" ]; then
+                mkdir -p "$tmp_build_dir/usr/share/$pkg_name"
+                mv "$tmp_build_dir/DEBIAN/postinst" "$tmp_build_dir/usr/share/$pkg_name/.orig_postinst"
+                chmod 755 "$tmp_build_dir/usr/share/$pkg_name/.orig_postinst"
+            fi
+
+            # Create installer postinst
+            cat << 'EOF_POSTINST' > "$tmp_build_dir/DEBIAN/postinst"
+#!/bin/sh
+set -e
+
+PKG_NAME="__PKG_NAME__"
+PKG_VER="__PKG_VERSION__"
+REMOTE_URL="__REMOTE_URL__"
+EXPECTED_SHA256="__EXPECTED_SHA256__"
+
+echo ""
+echo "================================================================================"
+echo "  SUJIT KUMAR BHARTI LINUX REPOSITORY - REMOTE PAYLOAD INSTALLER"
+echo "  Downloading: $PKG_NAME (v$PKG_VER)"
+echo "  Source:      $REMOTE_URL"
+echo "================================================================================"
+
+TMP_DEB=$(mktemp /tmp/${PKG_NAME}_payload_XXXXXX.deb)
+trap 'rm -f "$TMP_DEB"' EXIT INT TERM
+
+echo "[*] Downloading package payload from remote host..."
+if command -v curl >/dev/null 2>&1; then
+    curl -fL --progress-bar "$REMOTE_URL" -o "$TMP_DEB"
+elif command -v wget >/dev/null 2>&1; then
+    wget --show-progress -qO "$TMP_DEB" "$REMOTE_URL"
+else
+    echo "[-] Error: Neither curl nor wget was found on the system." >&2
+    exit 1
+fi
+
+if [ -n "$EXPECTED_SHA256" ] && command -v sha256sum >/dev/null 2>&1; then
+    echo "[*] Verifying package integrity (SHA256)..."
+    ACTUAL_SHA256=$(sha256sum "$TMP_DEB" | awk '{print $1}')
+    if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+        echo "[-] ERROR: Integrity verification failed! Checksum mismatch." >&2
+        echo "    Expected: $EXPECTED_SHA256" >&2
+        echo "    Actual:   $ACTUAL_SHA256" >&2
+        exit 1
+    fi
+    echo "[+] Checksum verified: $ACTUAL_SHA256"
+fi
+
+echo "[*] Extracting package files to system..."
+dpkg -x "$TMP_DEB" /
+
+# Register extracted files in /var/lib/dpkg/info/<pkg>.list so dpkg tracks them
+if [ -f "/var/lib/dpkg/info/${PKG_NAME}.list" ]; then
+    dpkg -c "$TMP_DEB" | awk '{print $6}' | sed 's/^\.//' | grep -v '^$' >> "/var/lib/dpkg/info/${PKG_NAME}.list" || true
+    sort -u "/var/lib/dpkg/info/${PKG_NAME}.list" -o "/var/lib/dpkg/info/${PKG_NAME}.list" 2>/dev/null || true
+fi
+
+rm -f "$TMP_DEB"
+
+# Execute original postinst if present
+if [ -f "/usr/share/${PKG_NAME}/.orig_postinst" ]; then
+    echo "[*] Running package post-install configuration..."
+    sh "/usr/share/${PKG_NAME}/.orig_postinst" "$@" || true
+    rm -f "/usr/share/${PKG_NAME}/.orig_postinst" 2>/dev/null || true
+fi
+
+echo "[+] $PKG_NAME (v$PKG_VER) successfully installed!"
+echo "================================================================================"
+echo ""
+exit 0
+EOF_POSTINST
+
+            sed -i "s|__PKG_NAME__|$pkg_name|g" "$tmp_build_dir/DEBIAN/postinst"
+            sed -i "s|__PKG_VERSION__|$pkg_version|g" "$tmp_build_dir/DEBIAN/postinst"
+            sed -i "s|__REMOTE_URL__|$remote_url|g" "$tmp_build_dir/DEBIAN/postinst"
+            sed -i "s|__EXPECTED_SHA256__|$orig_sha256|g" "$tmp_build_dir/DEBIAN/postinst"
+            chmod 755 "$tmp_build_dir/DEBIAN/postinst"
+
+            dpkg-deb --root-owner-group -b "$tmp_build_dir" "$dest_path" >/dev/null 2>&1
+            chmod 644 "$dest_path"
+            rm -rf "$tmp_build_dir"
+            echo -e "${GREEN}   ✔ Lightweight wrapper package created: $dest_filename ($(du -h "$dest_path" | cut -f1))${NC}"
+        elif [ "$os_type" == "universal" ]; then
+            echo -e "${BLUE}⚙️  Generating universal launcher script for remote payload...${NC}"
+            cat << 'EOF_UNI' > "$dest_path"
+#!/usr/bin/env bash
+# Universal Launcher for __PKG_NAME__ (Remote Payload)
+set -e
+PKG_NAME="__PKG_NAME__"
+REMOTE_URL="__REMOTE_URL__"
+EXPECTED_SHA256="__EXPECTED_SHA256__"
+CACHE_DIR="$HOME/.local/share/$PKG_NAME"
+TARGET_BIN="$CACHE_DIR/__DEST_FILENAME__"
+
+if [ ! -f "$TARGET_BIN" ]; then
+    mkdir -p "$CACHE_DIR"
+    echo "Downloading $PKG_NAME from remote host ($REMOTE_URL)..."
+    if command -v curl >/dev/null 2>&1; then
+        curl -fL --progress-bar "$REMOTE_URL" -o "$TARGET_BIN"
+    elif command -v wget >/dev/null 2>&1; then
+        wget --show-progress -qO "$TARGET_BIN" "$REMOTE_URL"
+    else
+        echo "Error: Neither curl nor wget found." >&2
+        exit 1
+    fi
+    if [ -n "$EXPECTED_SHA256" ] && command -v sha256sum >/dev/null 2>&1; then
+        ACTUAL_SHA256=$(sha256sum "$TARGET_BIN" | awk '{print $1}')
+        if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "Checksum mismatch for downloaded payload!" >&2
+            rm -f "$TARGET_BIN"
+            exit 1
+        fi
+    fi
+    chmod +x "$TARGET_BIN"
+fi
+
+exec "$TARGET_BIN" "$@"
+EOF_UNI
+            sed -i "s|__PKG_NAME__|$pkg_name|g" "$dest_path"
+            sed -i "s|__REMOTE_URL__|$remote_url|g" "$dest_path"
+            sed -i "s|__EXPECTED_SHA256__|$orig_sha256|g" "$dest_path"
+            sed -i "s|__DEST_FILENAME__|$dest_filename|g" "$dest_path"
+            chmod 755 "$dest_path"
+            echo -e "${GREEN}   ✔ Universal remote launcher created: $dest_filename${NC}"
+        else
+            cp "$input_file" "$dest_path"
+            chmod 644 "$dest_path"
+        fi
+    else
+        # Standard local package copy
+        cp "$input_file" "$dest_path"
+        chmod 644 "$dest_path"
+
+        # Synchronize internal deb control version if Debian package
+        if [ "$os_type" == "debian" ]; then
+            if command -v dpkg-deb >/dev/null 2>&1; then
+                local deb_internal_ver
+                deb_internal_ver=$(dpkg-deb -f "$dest_path" Version 2>/dev/null || echo "")
+                local deb_internal_pkg
+                deb_internal_pkg=$(dpkg-deb -f "$dest_path" Package 2>/dev/null || echo "")
+
+                if [ -n "$deb_internal_ver" ] && [ "$deb_internal_ver" != "$pkg_version" ]; then
+                    echo -e "${YELLOW}⚙️  Syncing internal DEBIAN/control Version ($deb_internal_ver -> $pkg_version)...${NC}"
+                    local tmp_deb_dir
+                    tmp_deb_dir=$(mktemp -d)
+                    dpkg-deb -R "$dest_path" "$tmp_deb_dir/pkg" >/dev/null 2>&1
+                    if [ -f "$tmp_deb_dir/pkg/DEBIAN/control" ]; then
+                        sed -i -E "s/^(Version:).*/\1 $pkg_version/" "$tmp_deb_dir/pkg/DEBIAN/control"
+                        if [ -n "$pkg_name" ]; then
+                            sed -i -E "s/^(Package:).*/\1 $pkg_name/" "$tmp_deb_dir/pkg/DEBIAN/control"
+                        fi
+                        dpkg-deb --root-owner-group -b "$tmp_deb_dir/pkg" "$dest_path" >/dev/null 2>&1
+                        echo -e "${GREEN}   ✔ Internal package Version successfully synchronized to $pkg_version!${NC}"
+                    fi
+                    rm -rf "$tmp_deb_dir"
+                fi
             fi
         fi
     fi
 
-    # Compute checksums, size, and metadata
+    # Clean up temp input file if it was a downloaded remote URL
+    if [[ "$input_file" == /tmp/remote_pkg_* ]]; then
+        rm -f "$input_file" 2>/dev/null || true
+    fi
+
+    # Compute checksums, size, and metadata for registry and package index
     local sha256
     sha256=$(python3 -c '
 import os, hashlib, subprocess, tarfile, io, json, sys, datetime, re
@@ -338,6 +564,10 @@ os_t = sys.argv[5]
 fname = sys.argv[6]
 fpath = sys.argv[7]
 desc = sys.argv[8]
+is_remote = sys.argv[9].lower() == "true"
+remote_url = sys.argv[10]
+orig_size = int(sys.argv[11]) if sys.argv[11].isdigit() else 0
+orig_sha256 = sys.argv[12]
 
 with open(dest_path, "rb") as f:
     content = f.read()
@@ -389,8 +619,15 @@ pkg_entry = {
     "md5": md5,
     "sha1": sha1,
     "description": desc,
-    "updated_at": now_iso
+    "updated_at": now_iso,
+    "is_remote": is_remote
 }
+
+if is_remote:
+    pkg_entry["remote_url"] = remote_url
+    pkg_entry["original_size"] = orig_size
+    pkg_entry["original_sha256"] = orig_sha256
+
 if control_info:
     control_info = re.sub(r"(?m)^Version:\s*.*$", f"Version: {ver}", control_info)
     control_info = re.sub(r"(?m)^Package:\s*.*$", f"Package: {name}", control_info)
@@ -404,19 +641,42 @@ with open(reg_file, "w") as f:
     json.dump(data, f, indent=2)
 
 print(sha256)
-' "$REGISTRY_FILE" "$dest_path" "$pkg_name" "$pkg_version" "$os_type" "$dest_filename" "$rel_path" "$pkg_desc")
+' "$REGISTRY_FILE" "$dest_path" "$pkg_name" "$pkg_version" "$os_type" "$dest_filename" "$rel_path" "$pkg_desc" "$is_remote" "$remote_url" "$orig_size" "$orig_sha256")
 
     if [ "$os_type" == "debian" ]; then
         update_apt_repo
     fi
+
+    # Safety check: strictly ensure NO file exceeding 100 MB exists in database/ before committing!
+    echo -e "${BLUE}🛡️  Verifying database files for GitHub limits...${NC}"
+    local oversized
+    oversized=$(find "$DATABASE_DIR" -type f -size +100M 2>/dev/null || true)
+    if [ -n "$oversized" ]; then
+        echo -e "${RED}${BOLD}❌ ERROR: Found file(s) exceeding GitHub 100 MB limit in database/:${NC}"
+        echo "$oversized"
+        echo -e "${RED}Aborting commit to prevent GitHub push rejection!${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}   ✔ All database files are strictly within GitHub's 100 MB limit!${NC}"
+
     echo ""
     echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${NC}"
     echo -e "${GREEN}${BOLD}🎉 SUCCESS! Package rolled out and indexed in database:${NC}"
     echo -e "   • Name:        ${BOLD}$pkg_name${NC}"
     echo -e "   • Version:     ${BOLD}$pkg_version${NC}"
     echo -e "   • Target OS:   ${BOLD}$os_type${NC}"
-    echo -e "   • Stored File: ${CYAN}$rel_path${NC}"
-    echo -e "   • SHA256:      ${PURPLE}$sha256${NC}"
+    if [ "$is_remote" == "true" ]; then
+        local orig_mb
+        orig_mb=$(python3 -c "import sys; print('{:.2f}'.format(float(sys.argv[1]) / (1024*1024)))" "$orig_size")
+        echo -e "   • Mode:        ${CYAN}${BOLD}REMOTE PAYLOAD (>100MB)${NC}"
+        echo -e "   • Remote URL:  ${CYAN}$remote_url${NC}"
+        echo -e "   • Wrapper Deb: ${PURPLE}$rel_path ($(du -h "$dest_path" | cut -f1))${NC}"
+        echo -e "   • Payload Size:${BOLD}$orig_mb MB${NC}"
+        echo -e "   • Payload Hash:${PURPLE}$orig_sha256${NC}"
+    else
+        echo -e "   • Stored File: ${CYAN}$rel_path${NC}"
+        echo -e "   • SHA256:      ${PURPLE}$sha256${NC}"
+    fi
     echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${NC}"
     echo ""
     echo -e "${BLUE}📦 Automatically staging, committing, and pushing to GitHub...${NC}"
@@ -445,12 +705,64 @@ interactive_wizard() {
 
     # Step 1: File location
     local input_file=""
+    local remote_url=""
+
     while [ -z "$input_file" ]; do
         read -e -p "📁 Step 1/5: Please enter file location (path to package): " input_file
         input_file="${input_file/#\~/$HOME}"
-        if [ ! -f "$input_file" ]; then
+        
+        # Check if user entered a remote URL directly at step 1
+        if [[ "$input_file" =~ ^https?:// ]]; then
+            remote_url="$input_file"
+            echo -e "   ${BLUE}🌐 Remote download URL detected: ${BOLD}$remote_url${NC}"
+            local tmp_fetch
+            tmp_fetch=$(mktemp /tmp/remote_pkg_XXXXXX)
+            echo -e "   ${BLUE}⏳ Fetching package to analyze metadata...${NC}"
+            if curl -fsSL "$remote_url" -o "$tmp_fetch" 2>/dev/null || wget -qO "$tmp_fetch" "$remote_url" 2>/dev/null; then
+                input_file="$tmp_fetch"
+            else
+                echo -e "${RED}   Failed to fetch package from '$remote_url'. Check URL or file path.${NC}"
+                input_file=""
+                remote_url=""
+                continue
+            fi
+        elif [ ! -f "$input_file" ]; then
             echo -e "${RED}   File '$input_file' not found! Please enter a valid path.${NC}"
             input_file=""
+        else
+            # Check local file size against GitHub 100 MB limit
+            local f_size
+            f_size=$(stat -c%s "$input_file" 2>/dev/null || wc -c < "$input_file")
+            local max_allowed=$((100 * 1024 * 1024)) # 100 MB
+            
+            if [ "$f_size" -gt "$max_allowed" ]; then
+                local f_size_mb
+                f_size_mb=$(python3 -c "import sys; print('{:.2f}'.format(float(sys.argv[1]) / (1024*1024)))" "$f_size")
+                echo ""
+                echo -e "   ${YELLOW}${BOLD}⚠️  LARGE PACKAGE DETECTED (${f_size_mb} MB):${NC}"
+                echo -e "   ${YELLOW}GitHub strictly limits git files to ${BOLD}100 MB${NC}${YELLOW}. Large binaries cannot be stored directly in Git.${NC}"
+                echo -e "   ${CYAN}To roll out this package, please enter its remote download URL (domain or IP).${NC}"
+                echo -e "   ${CYAN}Example:${NC} https://jharkhand.duckdns.org/repo/burpsuite-pro_2026.3.3-1_amd64.deb"
+                echo -e "            http://192.168.1.100/repo/burpsuite-pro_2026.3.3-1_amd64.deb"
+                echo ""
+                
+                while [ -z "$remote_url" ]; do
+                    read -p "🌐 Enter remote download URL (domain or IP): " remote_url
+                    remote_url=$(echo "$remote_url" | xargs)
+                    if [ -z "$remote_url" ]; then
+                        echo -e "${RED}   Remote URL is required for packages larger than 100 MB!${NC}"
+                    else
+                        if [[ ! "$remote_url" =~ ^https?:// ]]; then
+                            if [[ "$remote_url" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+                                remote_url="http://$remote_url"
+                            else
+                                remote_url="https://$remote_url"
+                            fi
+                            echo -e "   ${BLUE}Normalized URL -> ${BOLD}$remote_url${NC}"
+                        fi
+                    fi
+                done
+            fi
         fi
     done
 
@@ -584,7 +896,7 @@ interactive_wizard() {
     pkg_desc="${pkg_desc:-$default_desc}"
 
     echo ""
-    process_upload "$input_file" "$pkg_name" "$pkg_version" "$os_type" "$pkg_desc" "false"
+    process_upload "$input_file" "$pkg_name" "$pkg_version" "$os_type" "$pkg_desc" "false" "$remote_url"
 }
 
 # CLI Argument parsing
@@ -593,6 +905,7 @@ CLI_NAME=""
 CLI_VER=""
 CLI_OS=""
 CLI_DESC=""
+CLI_REMOTE_URL=""
 CLI_FORCE="false"
 
 if [ $# -eq 0 ]; then
@@ -644,6 +957,10 @@ while [ $# -gt 0 ]; do
             shift
             CLI_DESC="$1"
             ;;
+        -m|--remote-url)
+            shift
+            CLI_REMOTE_URL="$1"
+            ;;
         -r|--replace|--force)
             CLI_FORCE="true"
             ;;
@@ -658,10 +975,11 @@ done
 
 # If arguments were provided via flags, execute direct upload
 if [ -n "$CLI_FILE" ] && [ -n "$CLI_NAME" ] && [ -n "$CLI_VER" ] && [ -n "$CLI_OS" ]; then
-    process_upload "$CLI_FILE" "$CLI_NAME" "$CLI_VER" "$CLI_OS" "$CLI_DESC" "$CLI_FORCE"
+    process_upload "$CLI_FILE" "$CLI_NAME" "$CLI_VER" "$CLI_OS" "$CLI_DESC" "$CLI_FORCE" "$CLI_REMOTE_URL"
 else
     echo -e "${RED}Missing required parameters for CLI upload.${NC}"
-    echo "Usage: ./upload.sh -f <file> -n <name> -v <version> -o <debian|fedora|arch|universal>"
+    echo "Usage: ./upload.sh -f <file> -n <name> -v <version> -o <debian|fedora|arch|universal> [-m <remote_url>]"
     echo "Or run './upload.sh -u' for the interactive wizard."
     exit 1
 fi
+

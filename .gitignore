@@ -1,0 +1,9 @@
+# Temporary and build artifacts
+*.tmp
+*.bak
+*~
+__pycache__/
+*.pyc
+
+# Local scratch directory
+scratch/

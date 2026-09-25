@@ -97,6 +97,13 @@ If `omengaminghub` already exists in the repository:
 ./upload.sh -f ~/Downloads/omengaminghub_0.1.1_amd64.deb -n omengaminghub -v 0.1.1 -o debian -d "HP Omen Gaming Hub for Linux"
 ```
 
+#### 🌐 Handling Large Packages (> 100 MB via Remote Hosting)
+GitHub has a strict limit of 100 MB per file in Git. If you upload a package exceeding 100 MB (e.g. Burp Suite Pro, large IDEs, games):
+- `upload.sh` automatically detects the size and prompts for your **remote payload URL** (domain or IP, e.g. `https://jharkhand.duckdns.org/repo/burpsuite-pro_2026.3.3-1_amd64.deb` or `http://192.168.1.100/...`).
+- A lightweight, cryptographic payload-fetcher wrapper package (~3 KB) is indexed into the repository.
+- When an end-user runs `sudo apt install <package>`, APT installs the verified wrapper, streams the full payload from your remote server with a real-time progress bar, verifies SHA256 integrity, and configures the app seamlessly.
+- **Result:** You can host packages of ANY size (even multi-gigabytes) without exceeding GitHub's 100 MB limit!
+
 #### 🚀 Fully Automated Rollout & Local Disk Cleanup:
 At the end of upload, `upload.sh` automatically:
 1. Recalculates cryptographic hashes and updates `database/registry.json`.

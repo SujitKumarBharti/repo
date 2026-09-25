@@ -108,8 +108,12 @@ mb = total_bytes / (1024 * 1024)
 print("  Total repository package size: {:.2f} MB".format(mb))
 print("\n  Package List:")
 for p in pkgs:
-    local_exists = os.path.exists(p.get("filepath", ""))
-    status = "PRESENT ON DISK" if local_exists else "SAVED ON GITHUB (0 MB locally)"
+    if p.get("is_remote"):
+        rem_mb = p.get("original_size", 0) / (1024 * 1024)
+        status = "REMOTE HOSTED ({:.1f} MB @ {})".format(rem_mb, p.get("remote_url", "-"))
+    else:
+        local_exists = os.path.exists(p.get("filepath", ""))
+        status = "PRESENT ON DISK" if local_exists else "SAVED ON GITHUB (0 MB locally)"
     print("  • {:<20} (v{:<8}) [{:<7}] -> {}".format(p["name"], p.get("version", "-"), p.get("os_type", "-"), status))
 ' "$REGISTRY_FILE"
     else
@@ -253,12 +257,14 @@ for p in packages:
 if not target:
     print("NOT_FOUND")
 else:
-    print("{}|{}|{}|{}|{}".format(
+    print("{}|{}|{}|{}|{}|{}|{}".format(
         target["name"],
         target.get("version", "-"),
         target.get("os_type", "-"),
         target.get("filepath", ""),
-        target.get("filename", "")
+        target.get("filename", ""),
+        "true" if target.get("is_remote") else "false",
+        target.get("remote_url", "")
     ))
 ' "$REGISTRY_FILE" "$target_name" "$target_os")
 
@@ -267,14 +273,20 @@ else:
         return 1
     fi
 
-    IFS='|' read -r name ver os_type filepath filename <<< "$pkg_details"
+    IFS='|' read -r name ver os_type filepath filename is_remote remote_url <<< "$pkg_details"
 
     echo ""
     echo -e "${YELLOW}${BOLD}⚠️  CONFIRM PACKAGE DELETION:${NC}"
     echo -e "   • Name:        ${BOLD}$name${NC}"
     echo -e "   • Version:     ${BOLD}$ver${NC}"
     echo -e "   • Target OS:   ${CYAN}$os_type${NC}"
-    echo -e "   • File:        ${RED}$filepath${NC}"
+    if [ "$is_remote" == "true" ]; then
+        echo -e "   • Mode:        ${CYAN}REMOTE PAYLOAD (>100MB)${NC}"
+        echo -e "   • Remote URL:  ${CYAN}$remote_url${NC}"
+        echo -e "   • Wrapper File:${RED}$filepath${NC}"
+    else
+        echo -e "   • File:        ${RED}$filepath${NC}"
+    fi
     echo ""
 
     if [ "$force_flag" != "true" ]; then
@@ -383,6 +395,8 @@ for i, p in enumerate(packages, 1):
     ver = p.get("version", "-")
     os_t = p.get("os_type", "-")
     fname = p.get("filename", "-")
+    if p.get("is_remote"):
+        fname += " [REMOTE]"
     print("  {:<5} {:<24} {:<10} {:<12} {:<30}".format(num, name, ver, os_t, fname))
 ' "$REGISTRY_FILE"
 

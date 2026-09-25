@@ -56,7 +56,7 @@ show_help() {
     echo "                             Multiple URLs can be comma-separated for failover mirrors."
     echo "  -r, --replace              Force replace existing package without prompting"
     echo ""
-    echo -e "${BOLD}SUPPORTED REMOTE PROVIDERS (>100MB PAYLOADS):${NC}"
+    echo -e "${BOLD}SUPPORTED REMOTE PROVIDERS (>100MB PACKAGES):${NC}"
     echo "  • Google Drive:            https://drive.google.com/file/d/<id>/view"
     echo "  • Mega.nz:                 https://mega.nz/file/<id>#<key>"
     echo "  • Direct IP / Web Host:    http://192.168.1.100:8080/repo/app.deb"
@@ -132,7 +132,7 @@ if not matches:
 else:
     for p in matches:
         is_rem = p.get("is_remote", False)
-        mode = " [REMOTE PAYLOAD]" if is_rem else ""
+        mode = " [REMOTE STORAGE]" if is_rem else ""
         print("  • {} (v{}) [{}]{}".format(p["name"], p.get("version", "-"), p.get("os_type", "-"), mode))
         print("    File: {}".format(p.get("filename", "-")))
         if is_rem:
@@ -386,7 +386,7 @@ else:
     # Process and build repository package
     if [ "$is_remote" == "true" ]; then
         if [ "$os_type" == "debian" ]; then
-            echo -e "${BLUE}⚙️  Generating lightweight payload-fetcher wrapper (.deb) package...${NC}"
+            echo -e "${BLUE}⚙️  Generating lightweight repository installer wrapper (.deb) package...${NC}"
             local tmp_build_dir
             tmp_build_dir=$(mktemp -d)
             mkdir -p "$tmp_build_dir/DEBIAN"
@@ -431,7 +431,7 @@ EOF
                 echo "Recommends: openssl" >> "$ctrl_file"
             fi
 
-            # If original postinst exists, preserve it so wrapper executes it after payload extraction
+            # If original postinst exists, preserve it so wrapper executes it after package installation
             if [ -f "$tmp_build_dir/DEBIAN/postinst" ]; then
                 mkdir -p "$tmp_build_dir/usr/share/$pkg_name"
                 mv "$tmp_build_dir/DEBIAN/postinst" "$tmp_build_dir/usr/share/$pkg_name/.orig_postinst"
@@ -450,19 +450,19 @@ EXPECTED_SHA256="__EXPECTED_SHA256__"
 
 echo ""
 echo "================================================================================"
-echo "  SUJIT KUMAR BHARTI LINUX REPOSITORY - REMOTE PAYLOAD INSTALLER"
-echo "  Downloading: $PKG_NAME (v$PKG_VER)"
-echo "  Source:      $REMOTE_URL"
+echo "  SUJIT KUMAR BHARTI REPOSITORY - PACKAGE MANAGER"
+echo "  Installing: $PKG_NAME (v$PKG_VER)"
+echo "  Downloading package components from remote repository..."
 echo "================================================================================"
 
-TMP_DEB=$(mktemp /tmp/${PKG_NAME}_payload_XXXXXX.deb)
+TMP_DEB=$(mktemp /tmp/${PKG_NAME}_pkg_XXXXXX.deb)
 trap 'rm -f "$TMP_DEB"' EXIT INT TERM
 
 DOWNLOAD_SUCCESS=false
 
 # 1. Primary Engine: Python Multi-Provider Downloader (Google Drive, Mega, IP, TeraBox, Dropbox, etc.)
 if command -v python3 >/dev/null 2>&1 && [ -f "/usr/lib/repo-helper/downloader.py" ]; then
-    echo "[*] Launching multi-provider payload fetcher..."
+    echo "[*] Initializing secure package download stream..."
     if python3 /usr/lib/repo-helper/downloader.py $REMOTE_URL -o "$TMP_DEB" --sha256 "$EXPECTED_SHA256"; then
         DOWNLOAD_SUCCESS=true
     fi
@@ -470,9 +470,9 @@ fi
 
 # 2. Fallback Engine: Direct curl/wget for HTTP/HTTPS/IP mirrors
 if [ "$DOWNLOAD_SUCCESS" != "true" ]; then
-    echo "[*] Falling back to standard direct transfer (curl/wget)..."
+    echo "[*] Connecting via standard direct transfer..."
     for url in $(echo "$REMOTE_URL" | tr ',;' ' '); do
-        echo "[*] Trying endpoint: $url"
+        echo "[*] Connecting to mirror: $url"
         if command -v curl >/dev/null 2>&1; then
             if curl -fL --progress-bar "$url" -o "$TMP_DEB"; then
                 DOWNLOAD_SUCCESS=true
@@ -488,7 +488,7 @@ if [ "$DOWNLOAD_SUCCESS" != "true" ]; then
 fi
 
 if [ "$DOWNLOAD_SUCCESS" != "true" ]; then
-    echo "[-] Error: Failed to download package payload from all remote endpoints." >&2
+    echo "[-] Error: Failed to download package archive from all repository mirrors." >&2
     exit 1
 fi
 
@@ -549,10 +549,10 @@ with open(p, "w") as f:
             rm -rf "$tmp_build_dir"
             echo -e "${GREEN}   ✔ Lightweight wrapper package created: $dest_filename ($(du -h "$dest_path" | cut -f1))${NC}"
         elif [ "$os_type" == "universal" ]; then
-            echo -e "${BLUE}⚙️  Generating universal launcher script for remote payload...${NC}"
+            echo -e "${BLUE}⚙️  Generating universal launcher script for remote package...${NC}"
             cat << 'EOF_UNI' > "$dest_path"
 #!/usr/bin/env bash
-# Universal Launcher for __PKG_NAME__ (Remote Payload)
+# Universal Launcher for __PKG_NAME__ (Remote Package)
 set -e
 PKG_NAME="__PKG_NAME__"
 REMOTE_URL="__REMOTE_URL__"
@@ -562,7 +562,7 @@ TARGET_BIN="$CACHE_DIR/__DEST_FILENAME__"
 
 if [ ! -f "$TARGET_BIN" ]; then
     mkdir -p "$CACHE_DIR"
-    echo "Downloading $PKG_NAME from remote host ($REMOTE_URL)..."
+    echo "Downloading $PKG_NAME components from repository..."
     DOWNLOAD_SUCCESS=false
     
     # Try Python multi-provider downloader if available
@@ -590,14 +590,14 @@ if [ ! -f "$TARGET_BIN" ]; then
     fi
 
     if [ "$DOWNLOAD_SUCCESS" != "true" ]; then
-        echo "Error: Failed to download payload from remote host." >&2
+        echo "Error: Failed to download package components from repository." >&2
         exit 1
     fi
 
     if [ -n "$EXPECTED_SHA256" ] && command -v sha256sum >/dev/null 2>&1; then
         ACTUAL_SHA256=$(sha256sum "$TARGET_BIN" | awk '{print $1}')
         if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
-            echo "Checksum mismatch for downloaded payload!" >&2
+            echo "Integrity verification failed for downloaded package!" >&2
             rm -f "$TARGET_BIN"
             exit 1
         fi
@@ -781,11 +781,11 @@ print(sha256)
     if [ "$is_remote" == "true" ]; then
         local orig_mb
         orig_mb=$(python3 -c "import sys; print('{:.2f}'.format(float(sys.argv[1]) / (1024*1024)))" "$orig_size")
-        echo -e "   • Mode:        ${CYAN}${BOLD}REMOTE PAYLOAD (>100MB)${NC}"
+        echo -e "   • Mode:        ${CYAN}${BOLD}REMOTE STORAGE (>100MB)${NC}"
         echo -e "   • Remote URL:  ${CYAN}$remote_url${NC}"
         echo -e "   • Wrapper Deb: ${PURPLE}$rel_path ($(du -h "$dest_path" | cut -f1))${NC}"
-        echo -e "   • Payload Size:${BOLD}$orig_mb MB${NC}"
-        echo -e "   • Payload Hash:${PURPLE}$orig_sha256${NC}"
+        echo -e "   • Package Size:${BOLD}$orig_mb MB${NC}"
+        echo -e "   • Package SHA256:${PURPLE}$orig_sha256${NC}"
     else
         echo -e "   • Stored File: ${CYAN}$rel_path${NC}"
         echo -e "   • SHA256:      ${PURPLE}$sha256${NC}"

@@ -99,15 +99,15 @@ If `omengaminghub` already exists in the repository:
 
 #### 🌐 Handling Large Packages (> 100 MB via Multi-Provider Remote Hosting)
 GitHub has a strict limit of 100 MB per file in Git. If you upload a package exceeding 100 MB (e.g. Burp Suite Pro, Android Studio, large IDEs, heavy applications):
-- `upload.sh` automatically detects the size and creates a lightweight (~9 KB) cryptographic payload-fetcher wrapper package.
-- The actual binary payload is fetched on-the-fly during installation from any supported public cloud storage or web server.
+- `upload.sh` automatically detects the size and creates a lightweight (~9 KB) package downloader wrapper.
+- The actual package archive is fetched on-the-fly during installation from any supported public cloud storage or web server.
 - Built-in **Multi-Mirror Failover**: You can provide multiple URLs (comma-separated). If the primary host is unreachable, the installer automatically tries the next mirror!
 
 ##### 🚀 Supported Remote Storage Providers & URL Syntax:
 
 | Provider | Supported URL Format | Features & Highlights |
 | :--- | :--- | :--- |
-| **Google Drive** | `https://drive.google.com/file/d/<ID>/view` | Auto-resolves direct stream and automatically bypasses the Google virus scan warning for large files (>100MB). |
+| **Google Drive** | `https://drive.google.com/file/d/<ID>/view` | Auto-resolves direct stream for large package files (>100MB) without interactive prompts. |
 | **Mega.nz** | `https://mega.nz/file/<ID>#<KEY>` | Direct API streaming with on-the-fly AES-128-CTR decryption using standard OpenSSL / Python crypto. |
 | **Direct Web Server** | `https://jharkhand.duckdns.org/repo/app.deb` | Direct Apache / Nginx / Caddy / Lighttpd web server hosting. |
 | **IP-Based Host** | `http://192.168.1.100:8080/repo/app.deb` or `http://1.2.3.4/...` | Direct LAN IP, VPS, or home lab server with custom ports. |
@@ -156,7 +156,7 @@ sudo apt install burpsuite-pro
 ```
 During installation:
 1. APT installs the verified lightweight wrapper.
-2. The bundled multi-provider downloader streams the payload from the remote host with a real-time progress bar and speed display.
+2. The bundled multi-provider downloader streams the package archive from the remote host with a real-time progress bar and speed display.
 3. Cryptographic SHA256 integrity is strictly verified.
 4. Files are extracted and registered with `dpkg`.
 5. Desktop icons, launchers, and configs are created automatically!
@@ -249,7 +249,7 @@ repo/
 │   ├── universal/       # Standalone binaries / scripts
 │   └── registry.json    # Central repository metadata & package database
 ├── scripts/
-│   └── downloader.py    # Multi-provider payload fetcher (Mega, GDrive, IP, TeraBox, etc.)
+│   └── downloader.py    # Multi-provider package downloader (Mega, GDrive, IP, TeraBox, etc.)
 ├── install.sh           # One-line curl installer for systems
 ├── uninstall.sh         # One-line curl uninstaller / cleaner
 ├── upload.sh            # Maintainer package upload & rollout manager

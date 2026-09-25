@@ -289,7 +289,7 @@ else:
     echo -e "   • Version:     ${BOLD}$ver${NC}"
     echo -e "   • Target OS:   ${CYAN}$os_type${NC}"
     if [ "$is_remote" == "true" ]; then
-        echo -e "   • Mode:        ${CYAN}REMOTE PAYLOAD (>100MB)${NC}"
+        echo -e "   • Mode:        ${CYAN}REMOTE STORAGE (>100MB)${NC}"
         echo -e "   • Remote URL:  ${CYAN}$remote_url${NC}"
         echo -e "   • Wrapper File:${RED}$filepath${NC}"
     else

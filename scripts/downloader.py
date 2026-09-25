@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # ==============================================================================
-# Universal Linux Repository - Multi-Provider Remote Payload Downloader
+# Universal Linux Repository - Multi-Provider Remote Package Downloader
 # Maintainer: SujitKumarBharti
 # Repository: https://github.com/SujitKumarBharti/repo
 #
 # Supports:
-#   • Google Drive (large files >100MB with virus scan bypass, view/uc links)
+#   • Google Drive (large files >100MB direct streaming confirmation, view/uc links)
 #   • Mega.nz (API streaming + client-side AES-128-CTR decryption via openssl/python)
 #   • Direct HTTP/HTTPS & IP hosts (Apache, Nginx, Caddy, DuckDNS, LAN/VPS IPs)
 #   • TeraBox & mirrors (terabox.com, 1024tera.com, teraboxapp.com, etc.)
@@ -45,7 +45,7 @@ def format_size(bytes_val):
 def identify_provider(url):
     u = url.strip().lower()
     if "mega.nz" in u or "mega.co.nz" in u:
-        return "Mega.nz (Encrypted Cloud Storage)"
+        return "Mega Cloud Storage"
     elif "drive.google.com" in u or "docs.google.com" in u:
         return "Google Drive"
     elif any(d in u for d in ["terabox.com", "terabox.app", "1024tera.com", "teraboxapp.com", "freeterabox.com", "teraboxlink.com", "mirrobox.com", "nephobox.com"]):
@@ -133,7 +133,7 @@ class UniversalDownloader:
             self.progress_stream(resp, total_size, f)
 
     def download_gdrive(self):
-        self.log("Connecting to Google Drive...")
+        self.log("Connecting to Google Drive repository storage...")
         m = re.search(r"[-_\w]{25,}", self.raw_url)
         if not m:
             raise ValueError("Could not extract Google Drive File ID from URL.")
@@ -142,7 +142,7 @@ class UniversalDownloader:
         req = urllib.request.Request(init_url, headers={"User-Agent": USER_AGENT})
         resp = self.opener.open(req, timeout=30)
         
-        # Check if direct stream or virus scan warning confirmation form
+        # Check if direct stream or confirmation form
         first_peek = resp.read(65536)
         content_type = resp.headers.get("Content-Type", "")
         if "text/html" not in content_type and (first_peek.startswith(b"!<arch>") or resp.status == 200 and not first_peek.startswith(b"<!DOCTYPE")):
@@ -152,7 +152,7 @@ class UniversalDownloader:
                 self.progress_stream(resp, total_size, f)
             return
 
-        # Handle virus scan warning confirmation form for large files
+        # Handle confirmation form for large files
         html = first_peek.decode("utf-8", errors="ignore")
         action_m = re.search(r'<form[^>]*id=["\']download-form["\'][^>]*action=["\']([^"\']+)["\']', html) or re.search(r'action=["\'](https://drive\.usercontent\.google\.com/download[^"\']*)["\']', html)
         inputs = dict(re.findall(r'<input[^>]*name=["\']([^"\']+)["\'][^>]*value=["\']([^"\']*)["\']', html))
@@ -161,17 +161,17 @@ class UniversalDownloader:
             download_url = action_m.group(1)
             if inputs:
                 download_url += "?" + urllib.parse.urlencode(inputs)
-            self.log("Bypassing virus scan warning (large file confirmed). Starting download...")
+            self.log("Connected to storage server. Starting download...")
             req2 = urllib.request.Request(download_url, headers={"User-Agent": USER_AGENT})
             resp2 = self.opener.open(req2, timeout=30)
             total_size = int(resp2.headers.get("Content-Length", 0))
             with open(self.dest_path, "wb") as f:
                 self.progress_stream(resp2, total_size, f)
         else:
-            raise RuntimeError("Failed to resolve Google Drive download confirmation form.")
+            raise RuntimeError("Failed to resolve Google Drive download stream.")
 
     def download_mega(self):
-        self.log("Resolving Mega.nz stream & client-side encryption keys...")
+        self.log("Connecting to Mega repository storage...")
         m = re.search(r"mega\.(?:nz|co\.nz)/(?:file/|#!)?([a-zA-Z0-9_-]+)[#!]([a-zA-Z0-9_-]+)", self.raw_url)
         if not m:
             raise ValueError("Invalid Mega URL format. Expected: https://mega.nz/file/<id>#<key>")
@@ -186,8 +186,8 @@ class UniversalDownloader:
         iv_aes = b''.join(struct.pack('>I', x) for x in (k[4], k[5], 0, 0))
 
         api_url = "https://g.api.mega.co.nz/cs"
-        payload = json.dumps([{"a": "g", "g": 1, "ssl": 2, "p": file_id}]).encode('utf-8')
-        req = urllib.request.Request(api_url, data=payload, headers={"Content-Type": "application/json", "User-Agent": USER_AGENT})
+        post_data = json.dumps([{"a": "g", "g": 1, "ssl": 2, "p": file_id}]).encode('utf-8')
+        req = urllib.request.Request(api_url, data=post_data, headers={"Content-Type": "application/json", "User-Agent": USER_AGENT})
         resp = urllib.request.urlopen(req, timeout=20)
         res = json.loads(resp.read().decode('utf-8'))
         if not (isinstance(res, list) and res and "g" in res[0]):
@@ -195,7 +195,7 @@ class UniversalDownloader:
         
         dl_url = res[0]["g"]
         total_size = res[0].get("s", 0)
-        self.log(f"Mega download stream connected ({format_size(total_size)}). Decrypting AES-128-CTR on the fly...")
+        self.log(f"Connected to storage server ({format_size(total_size)}). Starting download...")
 
         # Decrypt using openssl enc (built into all Linux distros)
         openssl_proc = subprocess.Popen(
@@ -217,7 +217,7 @@ class UniversalDownloader:
         openssl_proc.wait()
 
     def download_terabox(self):
-        self.log("Resolving TeraBox download stream via multi-gateway API...")
+        self.log("Connecting to TeraBox repository storage...")
         # Extract shorturl / surl
         m = re.search(r"/s/1?([a-zA-Z0-9_-]+)", self.raw_url) or re.search(r"surl=1?([a-zA-Z0-9_-]+)", self.raw_url)
         surl = m.group(1) if m else ""
@@ -244,21 +244,21 @@ class UniversalDownloader:
                 continue
 
         if resolved_link:
-            self.log("TeraBox direct link resolved. Starting download...")
+            self.log("Connected to storage server. Starting download...")
             self.download_direct(resolved_link)
         else:
             # Fallback: attempt direct HTTP stream in case URL is already direct or uses a proxy
-            self.log("Attempting direct stream from TeraBox URL...")
+            self.log("Connecting to repository server...")
             self.download_direct(self.raw_url)
 
     def download_dropbox(self):
-        self.log("Converting Dropbox share link to direct download stream...")
+        self.log("Connecting to Dropbox repository storage...")
         dl_url = re.sub(r"[?&]dl=0", "", self.raw_url)
         dl_url += ("&" if "?" in dl_url else "?") + "dl=1"
         self.download_direct(dl_url)
 
     def download_onedrive(self):
-        self.log("Resolving OneDrive direct stream...")
+        self.log("Connecting to OneDrive repository storage...")
         dl_url = self.raw_url
         if "1drv.ms" in dl_url:
             req = urllib.request.Request(dl_url, headers={"User-Agent": USER_AGENT})
@@ -269,7 +269,7 @@ class UniversalDownloader:
         self.download_direct(dl_url)
 
     def download_mediafire(self):
-        self.log("Extracting MediaFire direct CDN link...")
+        self.log("Connecting to MediaFire repository storage...")
         req = urllib.request.Request(self.raw_url, headers={"User-Agent": USER_AGENT})
         html = self.opener.open(req, timeout=20).read().decode("utf-8", errors="ignore")
         m = re.search(r'href=["\'](https?://download\d+\.mediafire\.com/[^"\']+)["\']', html)
@@ -279,7 +279,7 @@ class UniversalDownloader:
             raise RuntimeError("Could not find direct download link on MediaFire page.")
 
     def download_pixeldrain(self):
-        self.log("Converting PixelDrain URL to direct API stream...")
+        self.log("Connecting to PixelDrain repository storage...")
         m = re.search(r"pixeldrain\.com/u/([a-zA-Z0-9_-]+)", self.raw_url)
         if m:
             self.download_direct(f"https://pixeldrain.com/api/file/{m.group(1)}")
@@ -288,7 +288,7 @@ class UniversalDownloader:
 
     def execute(self):
         url = self.raw_url
-        self.log(f"Provider: {self.provider}")
+        self.log(f"Host:     {self.provider}")
         self.log(f"Source:   {url}")
 
         if "mega.nz" in url or "mega.co.nz" in url:
@@ -316,7 +316,7 @@ class UniversalDownloader:
 
         # Integrity verification
         if self.expected_sha256:
-            self.log("Verifying payload SHA256 integrity...")
+            self.log("Verifying package SHA256 checksum...")
             sha256 = hashlib.sha256()
             with open(self.dest_path, "rb") as f:
                 while True:
@@ -331,7 +331,7 @@ class UniversalDownloader:
                     f"  Expected: {self.expected_sha256}\n"
                     f"  Actual:   {actual_sha256}"
                 )
-            self.log(f"Checksum verified: {actual_sha256}")
+            self.log(f"Package integrity verified: OK")
 
 def download_with_failover(urls, dest_path, expected_sha256=None):
     """Attempts download across multiple mirror URLs with automatic failover."""
@@ -348,24 +348,24 @@ def download_with_failover(urls, dest_path, expected_sha256=None):
     last_error = None
     for idx, url in enumerate(cleaned_urls, 1):
         if len(cleaned_urls) > 1:
-            print(f"\n[🔗] Attempting Mirror {idx}/{len(cleaned_urls)}: {identify_provider(url)}")
+            print(f"\n[🔗] Connecting to Mirror {idx}/{len(cleaned_urls)}: {identify_provider(url)}")
         try:
             dl = UniversalDownloader(url, dest_path, expected_sha256)
             dl.execute()
             if os.path.exists(dest_path) and os.path.getsize(dest_path) > 0:
-                print(f"[✔] Download completed successfully from: {url}")
+                print(f"[✔] Package download completed successfully.")
                 return True
         except Exception as e:
             last_error = e
-            print(f"[!] Warning: Mirror {idx} failed: {e}")
+            print(f"[!] Warning: Mirror {idx} temporarily unavailable ({e})")
             if os.path.exists(dest_path):
                 try: os.remove(dest_path)
                 except: pass
             if idx < len(cleaned_urls):
-                print("[*] Falling back to next available mirror...")
+                print("[*] Switching to next available mirror...")
                 time.sleep(1)
 
-    raise RuntimeError(f"All mirrors failed to download payload. Last error: {last_error}")
+    raise RuntimeError(f"All mirrors failed to download package. Last error: {last_error}")
 
 def main():
     import argparse

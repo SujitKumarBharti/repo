@@ -49,8 +49,8 @@ Description: Burp Suite Professional Edition
   - Dedicated 'burpsuite-pro' launcher with Java 21 auto-detection
   - Built-in '-generatekey' command option
 Filename: ./burpsuite-pro_2026.4.0.0-1.deb
-Size: 8984
-MD5sum: 7ac48438de2832232bd1770859c1d59a
-SHA1: a301a2890b770f02762ae5dd60120a55a9a75124
-SHA256: ab9e1024e53c9d35d302d7c38710f456cd3be8999b1525ecfcf672da2251c429
+Size: 8888
+MD5sum: be61dfa4d675933018fb733ae0ed6076
+SHA1: b3944c71683565efaa29c2968edef5003f03278c
+SHA256: 5cde5aa286938d53145a1bc83f390a475305d5cb5f67c71dafadf0224f845ae8
 

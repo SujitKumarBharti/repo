@@ -28,3 +28,29 @@ MD5sum: 47a4960320ca2f700b5485b50f84f6f5
 SHA1: 437432e2dedb8e3854ec136e0ea53585d1d59707
 SHA256: d34703cdfde80e5dc4a5458fac361808dadce46e13b64ed2fcbbcde0df004a25
 
+Package: burpsuite-pro
+Version: 2026.4.0.0-1
+Section: net
+Priority: optional
+Architecture: amd64
+Installed-Size: 676156
+Maintainer: bsilent <bsilent@localhost>
+Depends: curl | wget, ca-certificates, python3, openjdk-21-jre | openjdk-21-jdk
+Recommends: libxrender1, libxtst6, libxi6
+Homepage: https://portswigger.net/burp
+Description: Burp Suite Professional Edition
+ An integrated platform and graphical tool for performing security testing
+ of web applications.
+ .
+ This package includes:
+  - Burp Suite Professional (v2026.4.0.0)
+  - Burp Loader & Key Generator utility
+  - Desktop integration with application icons
+  - Dedicated 'burpsuite-pro' launcher with Java 21 auto-detection
+  - Built-in '-generatekey' command option
+Filename: ./burpsuite-pro_2026.4.0.0-1.deb
+Size: 8888
+MD5sum: a68ba95cef3b593e5e70aaabb0ad2a89
+SHA1: 853ca38151f56150f3f0f3a010c82370c7f40289
+SHA256: 1190ceb2974d888774d0d2fd88a7c3ff5835ccdc7a78515ea8f7039e767f8552
+

@@ -16,27 +16,6 @@
       "description": "Kali Linux GDM login wallpaper changer",
       "updated_at": "2026-09-24T17:44:43.243796+00:00",
       "control_info": "Package: kali-login-wallpaper\nVersion: 1.0.0\nSection: admin\nPriority: optional\nArchitecture: all\nDepends: python3, python3-gi, gir1.2-gtk-4.0, python3-pil, librsvg2-bin\nMaintainer: Bsilent\nDescription: Kali Linux GDM login wallpaper changer\n GTK4 utility to select, crop, apply and restore the Kali Linux GDM login background.\n"
-    },
-    {
-      "name": "burpsuite-pro",
-      "version": "2026.4.0.0-1",
-      "os_type": "debian",
-      "filename": "burpsuite-pro_2026.4.0.0-1.deb",
-      "filepath": "database/debian/burpsuite-pro_2026.4.0.0-1.deb",
-      "sha256": "4eb76181978a5c852cc1b97593a35a81e00cf152fcc24d21ef92dc2647e195b9",
-      "size": 8884,
-      "md5": "bd45e334272ff3cd425d5ac297001c80",
-      "sha1": "efce7309fd9898a5eb459e7a1282ead143607e19",
-      "description": "Burp Suite Professional Edition",
-      "updated_at": "2026-09-25T19:58:53.994305+00:00",
-      "is_remote": true,
-      "remote_url": "https://drive.google.com/file/d/1d1erCEzsCfidqVH1Zhcyn5KHLUiOSNvn/view?usp=sharing",
-      "original_size": 678274636,
-      "original_sha256": "126e58559b0530606d2c33bce74df9f524f46f6156363168941d94fc2c806d93",
-      "remote_mirrors": [
-        "https://drive.google.com/file/d/1d1erCEzsCfidqVH1Zhcyn5KHLUiOSNvn/view?usp=sharing"
-      ],
-      "control_info": "Package: burpsuite-pro\nVersion: 2026.4.0.0-1\nSection: net\nPriority: optional\nArchitecture: amd64\nInstalled-Size: 676156\nMaintainer: bsilent <bsilent@localhost>\nDepends: curl | wget, ca-certificates, python3, openjdk-21-jre | openjdk-21-jdk\nRecommends: libxrender1, libxtst6, libxi6\nHomepage: https://portswigger.net/burp\nDescription: Burp Suite Professional Edition\n An integrated platform and graphical tool for performing security testing\n of web applications.\n .\n This package includes:\n  - Burp Suite Professional (v2026.4.0.0)\n  - Burp Loader & Key Generator utility\n  - Desktop integration with application icons\n  - Dedicated 'burpsuite-pro' launcher with Java 21 auto-detection\n  - Built-in '-generatekey' command option\n"
     }
   ]
 }

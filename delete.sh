@@ -106,11 +106,19 @@ print("  Total packages in registry: {}".format(len(pkgs)))
 total_bytes = sum(p.get("size", 0) for p in pkgs)
 mb = total_bytes / (1024 * 1024)
 print("  Total repository package size: {:.2f} MB".format(mb))
-print("\n  Package List:")
+sys.path.insert(0, os.path.dirname(os.path.abspath(sys.argv[1])) + "/..")
+try:
+    from scripts.downloader import identify_provider
+except Exception:
+    identify_provider = lambda u: "Remote Host"
+
 for p in pkgs:
     if p.get("is_remote"):
         rem_mb = p.get("original_size", 0) / (1024 * 1024)
-        status = "REMOTE HOSTED ({:.1f} MB @ {})".format(rem_mb, p.get("remote_url", "-"))
+        rem_url = p.get("remote_url", "-")
+        first_url = rem_url.split(",")[0].strip()
+        prov = identify_provider(first_url)
+        status = "REMOTE HOSTED [{}] ({:.1f} MB @ {})".format(prov, rem_mb, rem_url)
     else:
         local_exists = os.path.exists(p.get("filepath", ""))
         status = "PRESENT ON DISK" if local_exists else "SAVED ON GITHUB (0 MB locally)"

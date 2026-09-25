@@ -45,19 +45,33 @@ show_help() {
     echo -e "  ${GREEN}-h, --help${NC}                 Show this help message and exit"
     echo ""
     echo -e "${BOLD}AUTOMATED CLI FLAGS (Non-Interactive Mode):${NC}"
-    echo "  -f, --file <path>          Path to package file (.deb, .rpm, .pkg.tar.zst, AppImage, binary)"
-    echo "  -n, --name <name>          Package identifier (e.g. omen-gaming-hub)"
-    echo "  -v, --version <version>    Package version (e.g. 1.0.0)"
+    echo "  -f, --file <path|url>      Path to local file OR remote URL (deb/rpm/zst/AppImage/bin)"
+    echo "  -n, --name <name>          Package identifier (e.g. burpsuite-pro)"
+    echo "  -v, --version <version>    Package version (e.g. 2026.4.0)"
     echo "  -o, --os <os_type>         Target OS: debian, fedora, arch, or universal"
     echo "  -d, --desc <description>   Package description"
-    echo "  -m, --remote-url <url>     Remote download URL for packages > 100MB (domain or IP)"
+    echo "  -m, --remote-url <url(s)>  Remote download URL(s) for packages > 100MB"
+    echo "                             Supports: Google Drive, Mega.nz, Direct IP/Apache/Nginx,"
+    echo "                             DuckDNS, TeraBox, GitHub Releases, Dropbox, OneDrive, etc."
+    echo "                             Multiple URLs can be comma-separated for failover mirrors."
     echo "  -r, --replace              Force replace existing package without prompting"
+    echo ""
+    echo -e "${BOLD}SUPPORTED REMOTE PROVIDERS (>100MB PAYLOADS):${NC}"
+    echo "  • Google Drive:            https://drive.google.com/file/d/<id>/view"
+    echo "  • Mega.nz:                 https://mega.nz/file/<id>#<key>"
+    echo "  • Direct IP / Web Host:    http://192.168.1.100:8080/repo/app.deb"
+    echo "  • DuckDNS / Apache:        https://jharkhand.duckdns.org/repo/app.deb"
+    echo "  • GitHub Releases:         https://github.com/<user>/<repo>/releases/download/v1.0/app.deb"
+    echo "  • TeraBox & Mirrors:       https://terabox.com/s/<surl>"
+    echo "  • Dropbox / MediaFire:     https://www.dropbox.com/s/... | https://www.mediafire.com/file/..."
+    echo "  • Multi-Mirror Failover:   url1, url2 (auto-fallback if primary host goes down)"
     echo ""
     echo -e "${BOLD}EXAMPLES:${NC}"
     echo "  ./upload.sh -u                                       # Interactive wizard"
     echo "  ./upload.sh -l                                       # List all packages"
-    echo "  ./upload.sh -f ./app.deb -n myapp -v 1.0 -o debian   # Direct upload"
-    echo "  ./upload.sh -f ./big.deb -n myapp -v 1.0 -o debian -m https://jharkhand.duckdns.org/repo/big.deb"
+    echo "  ./upload.sh -f ./app.deb -n myapp -v 1.0 -o debian   # Direct local upload"
+    echo "  ./upload.sh -f https://mega.nz/file/ID#KEY -n myapp -v 1.0 -o debian"
+    echo "  ./upload.sh -f ./big.deb -n myapp -v 1.0 -o debian -m https://drive.google.com/file/d/ID/view"
     echo "  ./upload.sh --delete myapp                           # Remove package"
     echo ""
 }
@@ -274,10 +288,17 @@ process_upload() {
             echo ""
             echo -e "${YELLOW}${BOLD}⚠️  PACKAGE FILE EXCEEDS GITHUB 100 MB LIMIT (${size_mb} MB):${NC}"
             echo -e "${YELLOW}   GitHub strictly blocks commits containing files larger than 100 MB.${NC}"
-            echo -e "${CYAN}   Please specify the remote download location (domain or IP).${NC}"
-            echo -e "${CYAN}   Example: https://jharkhand.duckdns.org/repo/burpsuite-pro_2026.3.3-1_amd64.deb${NC}"
-            echo -e "${CYAN}            http://192.168.1.100/repo/burpsuite-pro_2026.3.3-1_amd64.deb${NC}"
-            read -p "🌐 Enter remote download URL (domain or IP): " remote_url
+            echo -e "${CYAN}${BOLD}   Supported Remote Hosting Providers & Locations:${NC}"
+            echo -e "   • ${GREEN}Google Drive:${NC}          https://drive.google.com/file/d/<id>/view"
+            echo -e "   • ${GREEN}Mega.nz:${NC}               https://mega.nz/file/<id>#<key>"
+            echo -e "   • ${GREEN}Direct IP / Web Host:${NC}  http://192.168.1.100:8080/repo/app.deb"
+            echo -e "   • ${GREEN}DuckDNS / Apache:${NC}      https://jharkhand.duckdns.org/repo/app.deb"
+            echo -e "   • ${GREEN}GitHub Releases:${NC}       https://github.com/<user>/<repo>/releases/download/v1.0/app.deb"
+            echo -e "   • ${GREEN}TeraBox & Mirrors:${NC}     https://terabox.com/s/<surl>"
+            echo -e "   • ${GREEN}Dropbox / MediaFire:${NC}   https://www.dropbox.com/s/... | https://www.mediafire.com/file/..."
+            echo -e "   • ${PURPLE}Multi-Mirror Failover:${NC} Enter multiple URLs separated by comma (,)"
+            echo ""
+            read -p "🌐 Enter remote download URL(s): " remote_url
             remote_url=$(echo "$remote_url" | xargs)
             if [ -z "$remote_url" ]; then
                 echo -e "${RED}❌ Error: Remote download URL is mandatory for packages exceeding 100 MB.${NC}"
@@ -285,14 +306,28 @@ process_upload() {
             fi
         fi
 
-        # Auto-normalize URL protocol if missing
-        if [[ ! "$remote_url" =~ ^https?:// ]]; then
-            if [[ "$remote_url" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-                remote_url="http://$remote_url"
-            else
-                remote_url="https://$remote_url"
-            fi
-            echo -e "${BLUE}Normalized remote URL -> ${BOLD}$remote_url${NC}"
+        # Auto-normalize URLs in remote_url (supports comma-separated multi-mirror list)
+        remote_url=$(python3 -c '
+import sys, re
+raw = sys.argv[1]
+items = [u.strip() for u in re.split(r"[\s,;]+", raw) if u.strip()]
+normalized = []
+for u in items:
+    if not re.match(r"^https?://", u):
+        if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}", u):
+            normalized.append("http://" + u)
+        else:
+            normalized.append("https://" + u)
+    else:
+        normalized.append(u)
+print(", ".join(normalized))
+' "$remote_url")
+
+        echo -e "${BLUE}🌐 Configured Remote Source:${NC} ${BOLD}$remote_url${NC}"
+        if [ -f "$SCRIPT_DIR/scripts/downloader.py" ]; then
+            python3 "$SCRIPT_DIR/scripts/downloader.py" --info $remote_url 2>/dev/null | grep "Provider:" | while read -r line; do
+                echo -e "   ${GREEN}✔ $line${NC}"
+            done
         fi
     fi
 
@@ -355,6 +390,11 @@ else:
             local tmp_build_dir
             tmp_build_dir=$(mktemp -d)
             mkdir -p "$tmp_build_dir/DEBIAN"
+            mkdir -p "$tmp_build_dir/usr/lib/repo-helper"
+
+            # Bundle universal multi-provider downloader into wrapper package
+            cp "$SCRIPT_DIR/scripts/downloader.py" "$tmp_build_dir/usr/lib/repo-helper/downloader.py"
+            chmod 755 "$tmp_build_dir/usr/lib/repo-helper/downloader.py"
 
             # Extract control and maintainer scripts from input deb
             dpkg-deb -e "$input_file" "$tmp_build_dir/DEBIAN" 2>/dev/null || true
@@ -376,13 +416,19 @@ EOF
             sed -i -E "s/^(Package:).*/\1 $pkg_name/" "$ctrl_file"
             sed -i -E "s/^(Version:).*/\1 $pkg_version/" "$ctrl_file"
 
-            # Ensure Depends includes curl | wget, ca-certificates
+            # Ensure Depends includes python3, curl | wget, ca-certificates
             if grep -q "^Depends:" "$ctrl_file"; then
+                if ! grep -q "python3" "$ctrl_file"; then
+                    sed -i -E 's/^(Depends:\s*)(.*)/\1python3, \2/' "$ctrl_file"
+                fi
                 if ! grep -q "curl" "$ctrl_file" && ! grep -q "wget" "$ctrl_file"; then
                     sed -i -E 's/^(Depends:\s*)(.*)/\1curl | wget, ca-certificates, \2/' "$ctrl_file"
                 fi
             else
-                echo "Depends: curl | wget, ca-certificates" >> "$ctrl_file"
+                echo "Depends: python3, curl | wget, ca-certificates" >> "$ctrl_file"
+            fi
+            if ! grep -q "^Recommends:" "$ctrl_file"; then
+                echo "Recommends: openssl" >> "$ctrl_file"
             fi
 
             # If original postinst exists, preserve it so wrapper executes it after payload extraction
@@ -412,13 +458,37 @@ echo "==========================================================================
 TMP_DEB=$(mktemp /tmp/${PKG_NAME}_payload_XXXXXX.deb)
 trap 'rm -f "$TMP_DEB"' EXIT INT TERM
 
-echo "[*] Downloading package payload from remote host..."
-if command -v curl >/dev/null 2>&1; then
-    curl -fL --progress-bar "$REMOTE_URL" -o "$TMP_DEB"
-elif command -v wget >/dev/null 2>&1; then
-    wget --show-progress -qO "$TMP_DEB" "$REMOTE_URL"
-else
-    echo "[-] Error: Neither curl nor wget was found on the system." >&2
+DOWNLOAD_SUCCESS=false
+
+# 1. Primary Engine: Python Multi-Provider Downloader (Google Drive, Mega, IP, TeraBox, Dropbox, etc.)
+if command -v python3 >/dev/null 2>&1 && [ -f "/usr/lib/repo-helper/downloader.py" ]; then
+    echo "[*] Launching multi-provider payload fetcher..."
+    if python3 /usr/lib/repo-helper/downloader.py $REMOTE_URL -o "$TMP_DEB" --sha256 "$EXPECTED_SHA256"; then
+        DOWNLOAD_SUCCESS=true
+    fi
+fi
+
+# 2. Fallback Engine: Direct curl/wget for HTTP/HTTPS/IP mirrors
+if [ "$DOWNLOAD_SUCCESS" != "true" ]; then
+    echo "[*] Falling back to standard direct transfer (curl/wget)..."
+    for url in $(echo "$REMOTE_URL" | tr ',;' ' '); do
+        echo "[*] Trying endpoint: $url"
+        if command -v curl >/dev/null 2>&1; then
+            if curl -fL --progress-bar "$url" -o "$TMP_DEB"; then
+                DOWNLOAD_SUCCESS=true
+                break
+            fi
+        elif command -v wget >/dev/null 2>&1; then
+            if wget --show-progress -qO "$TMP_DEB" "$url"; then
+                DOWNLOAD_SUCCESS=true
+                break
+            fi
+        fi
+    done
+fi
+
+if [ "$DOWNLOAD_SUCCESS" != "true" ]; then
+    echo "[-] Error: Failed to download package payload from all remote endpoints." >&2
     exit 1
 fi
 
@@ -440,6 +510,7 @@ dpkg -x "$TMP_DEB" /
 # Register extracted files in /var/lib/dpkg/info/<pkg>.list so dpkg tracks them
 if [ -f "/var/lib/dpkg/info/${PKG_NAME}.list" ]; then
     dpkg -c "$TMP_DEB" | awk '{print $6}' | sed 's/^\.//' | grep -v '^$' >> "/var/lib/dpkg/info/${PKG_NAME}.list" || true
+    echo "/usr/lib/repo-helper/downloader.py" >> "/var/lib/dpkg/info/${PKG_NAME}.list" 2>/dev/null || true
     sort -u "/var/lib/dpkg/info/${PKG_NAME}.list" -o "/var/lib/dpkg/info/${PKG_NAME}.list" 2>/dev/null || true
 fi
 
@@ -458,10 +529,19 @@ echo ""
 exit 0
 EOF_POSTINST
 
-            sed -i "s|__PKG_NAME__|$pkg_name|g" "$tmp_build_dir/DEBIAN/postinst"
-            sed -i "s|__PKG_VERSION__|$pkg_version|g" "$tmp_build_dir/DEBIAN/postinst"
-            sed -i "s|__REMOTE_URL__|$remote_url|g" "$tmp_build_dir/DEBIAN/postinst"
-            sed -i "s|__EXPECTED_SHA256__|$orig_sha256|g" "$tmp_build_dir/DEBIAN/postinst"
+            # Safe literal substitution without sed corruption
+            python3 -c '
+import sys
+p, name, ver, url, sha = sys.argv[1:6]
+with open(p, "r") as f:
+    c = f.read()
+c = c.replace("__PKG_NAME__", name)
+c = c.replace("__PKG_VERSION__", ver)
+c = c.replace("__REMOTE_URL__", url)
+c = c.replace("__EXPECTED_SHA256__", sha)
+with open(p, "w") as f:
+    f.write(c)
+' "$tmp_build_dir/DEBIAN/postinst" "$pkg_name" "$pkg_version" "$remote_url" "$orig_sha256"
             chmod 755 "$tmp_build_dir/DEBIAN/postinst"
 
             dpkg-deb --root-owner-group -b "$tmp_build_dir" "$dest_path" >/dev/null 2>&1
@@ -483,14 +563,37 @@ TARGET_BIN="$CACHE_DIR/__DEST_FILENAME__"
 if [ ! -f "$TARGET_BIN" ]; then
     mkdir -p "$CACHE_DIR"
     echo "Downloading $PKG_NAME from remote host ($REMOTE_URL)..."
-    if command -v curl >/dev/null 2>&1; then
-        curl -fL --progress-bar "$REMOTE_URL" -o "$TARGET_BIN"
-    elif command -v wget >/dev/null 2>&1; then
-        wget --show-progress -qO "$TARGET_BIN" "$REMOTE_URL"
-    else
-        echo "Error: Neither curl nor wget found." >&2
+    DOWNLOAD_SUCCESS=false
+    
+    # Try Python multi-provider downloader if available
+    if command -v python3 >/dev/null 2>&1 && [ -f "/usr/lib/repo-helper/downloader.py" ]; then
+        if python3 /usr/lib/repo-helper/downloader.py $REMOTE_URL -o "$TARGET_BIN" --sha256 "$EXPECTED_SHA256"; then
+            DOWNLOAD_SUCCESS=true
+        fi
+    fi
+
+    # Fallback to direct curl / wget
+    if [ "$DOWNLOAD_SUCCESS" != "true" ]; then
+        for url in $(echo "$REMOTE_URL" | tr ',;' ' '); do
+            if command -v curl >/dev/null 2>&1; then
+                if curl -fL --progress-bar "$url" -o "$TARGET_BIN"; then
+                    DOWNLOAD_SUCCESS=true
+                    break
+                fi
+            elif command -v wget >/dev/null 2>&1; then
+                if wget --show-progress -qO "$TARGET_BIN" "$url"; then
+                    DOWNLOAD_SUCCESS=true
+                    break
+                fi
+            fi
+        done
+    fi
+
+    if [ "$DOWNLOAD_SUCCESS" != "true" ]; then
+        echo "Error: Failed to download payload from remote host." >&2
         exit 1
     fi
+
     if [ -n "$EXPECTED_SHA256" ] && command -v sha256sum >/dev/null 2>&1; then
         ACTUAL_SHA256=$(sha256sum "$TARGET_BIN" | awk '{print $1}')
         if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
@@ -504,10 +607,18 @@ fi
 
 exec "$TARGET_BIN" "$@"
 EOF_UNI
-            sed -i "s|__PKG_NAME__|$pkg_name|g" "$dest_path"
-            sed -i "s|__REMOTE_URL__|$remote_url|g" "$dest_path"
-            sed -i "s|__EXPECTED_SHA256__|$orig_sha256|g" "$dest_path"
-            sed -i "s|__DEST_FILENAME__|$dest_filename|g" "$dest_path"
+            python3 -c '
+import sys
+p, name, url, sha, fname = sys.argv[1:6]
+with open(p, "r") as f:
+    c = f.read()
+c = c.replace("__PKG_NAME__", name)
+c = c.replace("__REMOTE_URL__", url)
+c = c.replace("__EXPECTED_SHA256__", sha)
+c = c.replace("__DEST_FILENAME__", fname)
+with open(p, "w") as f:
+    f.write(c)
+' "$dest_path" "$pkg_name" "$remote_url" "$orig_sha256" "$dest_filename"
             chmod 755 "$dest_path"
             echo -e "${GREEN}   ✔ Universal remote launcher created: $dest_filename${NC}"
         else
@@ -627,6 +738,8 @@ if is_remote:
     pkg_entry["remote_url"] = remote_url
     pkg_entry["original_size"] = orig_size
     pkg_entry["original_sha256"] = orig_sha256
+    mirrors = [u.strip() for u in re.split(r"[\s,;]+", remote_url) if u.strip()]
+    pkg_entry["remote_mirrors"] = mirrors
 
 if control_info:
     control_info = re.sub(r"(?m)^Version:\s*.*$", f"Version: {ver}", control_info)
@@ -712,16 +825,30 @@ interactive_wizard() {
         input_file="${input_file/#\~/$HOME}"
         
         # Check if user entered a remote URL directly at step 1
-        if [[ "$input_file" =~ ^https?:// ]]; then
+        if [[ "$input_file" =~ ^https?:// ]] || [[ "$input_file" =~ ^mega\.(nz|co\.nz) ]] || [[ "$input_file" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+ ]]; then
             remote_url="$input_file"
+            if [[ ! "$remote_url" =~ ^https?:// ]]; then
+                if [[ "$remote_url" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+                    remote_url="http://$remote_url"
+                else
+                    remote_url="https://$remote_url"
+                fi
+            fi
             echo -e "   ${BLUE}🌐 Remote download URL detected: ${BOLD}$remote_url${NC}"
+            if [ -f "$SCRIPT_DIR/scripts/downloader.py" ]; then
+                local prov
+                prov=$(python3 "$SCRIPT_DIR/scripts/downloader.py" --info "$remote_url" 2>/dev/null | grep "Provider:" | cut -d: -f2- | xargs)
+                if [ -n "$prov" ]; then
+                    echo -e "   ${GREEN}✔ Recognized Provider: ${BOLD}$prov${NC}"
+                fi
+            fi
             local tmp_fetch
             tmp_fetch=$(mktemp /tmp/remote_pkg_XXXXXX)
-            echo -e "   ${BLUE}⏳ Fetching package to analyze metadata...${NC}"
-            if curl -fsSL "$remote_url" -o "$tmp_fetch" 2>/dev/null || wget -qO "$tmp_fetch" "$remote_url" 2>/dev/null; then
+            echo -e "   ${BLUE}⏳ Fetching package from remote host to analyze metadata...${NC}"
+            if python3 "$SCRIPT_DIR/scripts/downloader.py" "$remote_url" -o "$tmp_fetch"; then
                 input_file="$tmp_fetch"
             else
-                echo -e "${RED}   Failed to fetch package from '$remote_url'. Check URL or file path.${NC}"
+                echo -e "${RED}   Failed to fetch package from '$remote_url'. Check URL, network, or permissions.${NC}"
                 input_file=""
                 remote_url=""
                 continue
@@ -741,24 +868,43 @@ interactive_wizard() {
                 echo ""
                 echo -e "   ${YELLOW}${BOLD}⚠️  LARGE PACKAGE DETECTED (${f_size_mb} MB):${NC}"
                 echo -e "   ${YELLOW}GitHub strictly limits git files to ${BOLD}100 MB${NC}${YELLOW}. Large binaries cannot be stored directly in Git.${NC}"
-                echo -e "   ${CYAN}To roll out this package, please enter its remote download URL (domain or IP).${NC}"
-                echo -e "   ${CYAN}Example:${NC} https://jharkhand.duckdns.org/repo/burpsuite-pro_2026.3.3-1_amd64.deb"
-                echo -e "            http://192.168.1.100/repo/burpsuite-pro_2026.3.3-1_amd64.deb"
+                echo -e "   ${CYAN}${BOLD}Supported Remote Hosting Providers & Locations:${NC}"
+                echo -e "     • ${GREEN}Google Drive:${NC}          https://drive.google.com/file/d/<id>/view"
+                echo -e "     • ${GREEN}Mega.nz:${NC}               https://mega.nz/file/<id>#<key>"
+                echo -e "     • ${GREEN}Direct IP / Web Host:${NC}  http://192.168.1.100:8080/repo/app.deb"
+                echo -e "     • ${GREEN}DuckDNS / Apache:${NC}      https://jharkhand.duckdns.org/repo/app.deb"
+                echo -e "     • ${GREEN}GitHub Releases:${NC}       https://github.com/<user>/<repo>/releases/download/v1.0/app.deb"
+                echo -e "     • ${GREEN}TeraBox & Mirrors:${NC}     https://terabox.com/s/<surl>"
+                echo -e "     • ${GREEN}Dropbox / MediaFire:${NC}   https://www.dropbox.com/s/... | https://www.mediafire.com/file/..."
+                echo -e "     • ${PURPLE}Multi-Mirror Failover:${NC} Enter multiple URLs separated by comma (,)"
                 echo ""
                 
                 while [ -z "$remote_url" ]; do
-                    read -p "🌐 Enter remote download URL (domain or IP): " remote_url
+                    read -p "🌐 Enter remote download URL(s): " remote_url
                     remote_url=$(echo "$remote_url" | xargs)
                     if [ -z "$remote_url" ]; then
                         echo -e "${RED}   Remote URL is required for packages larger than 100 MB!${NC}"
                     else
-                        if [[ ! "$remote_url" =~ ^https?:// ]]; then
-                            if [[ "$remote_url" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-                                remote_url="http://$remote_url"
-                            else
-                                remote_url="https://$remote_url"
-                            fi
-                            echo -e "   ${BLUE}Normalized URL -> ${BOLD}$remote_url${NC}"
+                        remote_url=$(python3 -c '
+import sys, re
+raw = sys.argv[1]
+items = [u.strip() for u in re.split(r"[\s,;]+", raw) if u.strip()]
+norm = []
+for u in items:
+    if not re.match(r"^https?://", u):
+        if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}", u):
+            norm.append("http://" + u)
+        else:
+            norm.append("https://" + u)
+    else:
+        norm.append(u)
+print(", ".join(norm))
+' "$remote_url")
+                        echo -e "   ${BLUE}Configured URL -> ${BOLD}$remote_url${NC}"
+                        if [ -f "$SCRIPT_DIR/scripts/downloader.py" ]; then
+                            python3 "$SCRIPT_DIR/scripts/downloader.py" --info $remote_url 2>/dev/null | grep "Provider:" | while read -r line; do
+                                echo -e "   ${GREEN}✔ $line${NC}"
+                            done
                         fi
                     fi
                 done
@@ -975,10 +1121,25 @@ done
 
 # If arguments were provided via flags, execute direct upload
 if [ -n "$CLI_FILE" ] && [ -n "$CLI_NAME" ] && [ -n "$CLI_VER" ] && [ -n "$CLI_OS" ]; then
+    # Check if CLI_FILE is a remote URL
+    if [[ "$CLI_FILE" =~ ^https?:// ]] || [[ "$CLI_FILE" =~ ^mega\.(nz|co\.nz) ]] || [[ "$CLI_FILE" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+        if [ -z "$CLI_REMOTE_URL" ]; then
+            CLI_REMOTE_URL="$CLI_FILE"
+        fi
+        echo -e "${BLUE}🌐 Remote package URL provided via CLI: ${BOLD}$CLI_FILE${NC}"
+        tmp_cli_fetch=$(mktemp /tmp/remote_pkg_XXXXXX)
+        echo -e "${BLUE}⏳ Downloading package to inspect and index metadata...${NC}"
+        if python3 "$SCRIPT_DIR/scripts/downloader.py" "$CLI_FILE" -o "$tmp_cli_fetch"; then
+            CLI_FILE="$tmp_cli_fetch"
+        else
+            echo -e "${RED}❌ Failed to fetch remote package: $CLI_FILE${NC}"
+            exit 1
+        fi
+    fi
     process_upload "$CLI_FILE" "$CLI_NAME" "$CLI_VER" "$CLI_OS" "$CLI_DESC" "$CLI_FORCE" "$CLI_REMOTE_URL"
 else
     echo -e "${RED}Missing required parameters for CLI upload.${NC}"
-    echo "Usage: ./upload.sh -f <file> -n <name> -v <version> -o <debian|fedora|arch|universal> [-m <remote_url>]"
+    echo "Usage: ./upload.sh -f <file|url> -n <name> -v <version> -o <debian|fedora|arch|universal> [-m <remote_url>]"
     echo "Or run './upload.sh -u' for the interactive wizard."
     exit 1
 fi

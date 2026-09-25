@@ -97,12 +97,69 @@ If `omengaminghub` already exists in the repository:
 ./upload.sh -f ~/Downloads/omengaminghub_0.1.1_amd64.deb -n omengaminghub -v 0.1.1 -o debian -d "HP Omen Gaming Hub for Linux"
 ```
 
-#### 🌐 Handling Large Packages (> 100 MB via Remote Hosting)
-GitHub has a strict limit of 100 MB per file in Git. If you upload a package exceeding 100 MB (e.g. Burp Suite Pro, large IDEs, games):
-- `upload.sh` automatically detects the size and prompts for your **remote payload URL** (domain or IP, e.g. `https://jharkhand.duckdns.org/repo/burpsuite-pro_2026.3.3-1_amd64.deb` or `http://192.168.1.100/...`).
-- A lightweight, cryptographic payload-fetcher wrapper package (~3 KB) is indexed into the repository.
-- When an end-user runs `sudo apt install <package>`, APT installs the verified wrapper, streams the full payload from your remote server with a real-time progress bar, verifies SHA256 integrity, and configures the app seamlessly.
-- **Result:** You can host packages of ANY size (even multi-gigabytes) without exceeding GitHub's 100 MB limit!
+#### 🌐 Handling Large Packages (> 100 MB via Multi-Provider Remote Hosting)
+GitHub has a strict limit of 100 MB per file in Git. If you upload a package exceeding 100 MB (e.g. Burp Suite Pro, Android Studio, large IDEs, heavy applications):
+- `upload.sh` automatically detects the size and creates a lightweight (~9 KB) cryptographic payload-fetcher wrapper package.
+- The actual binary payload is fetched on-the-fly during installation from any supported public cloud storage or web server.
+- Built-in **Multi-Mirror Failover**: You can provide multiple URLs (comma-separated). If the primary host is unreachable, the installer automatically tries the next mirror!
+
+##### 🚀 Supported Remote Storage Providers & URL Syntax:
+
+| Provider | Supported URL Format | Features & Highlights |
+| :--- | :--- | :--- |
+| **Google Drive** | `https://drive.google.com/file/d/<ID>/view` | Auto-resolves direct stream and automatically bypasses the Google virus scan warning for large files (>100MB). |
+| **Mega.nz** | `https://mega.nz/file/<ID>#<KEY>` | Direct API streaming with on-the-fly AES-128-CTR decryption using standard OpenSSL / Python crypto. |
+| **Direct Web Server** | `https://jharkhand.duckdns.org/repo/app.deb` | Direct Apache / Nginx / Caddy / Lighttpd web server hosting. |
+| **IP-Based Host** | `http://192.168.1.100:8080/repo/app.deb` or `http://1.2.3.4/...` | Direct LAN IP, VPS, or home lab server with custom ports. |
+| **GitHub Releases** | `https://github.com/<user>/<repo>/releases/download/<tag>/app.deb` | Free high-speed global CDN with support up to 2 GB per asset file! |
+| **TeraBox & Mirrors** | `https://terabox.com/s/<surl>` or `https://1024tera.com/s/...` | Auto-resolves direct download streams across multiple public Terabox gateways. |
+| **Dropbox** | `https://www.dropbox.com/s/<ID>/app.deb` | Auto-converts share links into direct download stream (`dl=1`). |
+| **OneDrive** | `https://1drv.ms/...` or `https://onedrive.live.com/...` | Auto-resolves direct binary download stream. |
+| **MediaFire** | `https://www.mediafire.com/file/...` | Automatically extracts direct CDN download link from page. |
+| **PixelDrain** | `https://pixeldrain.com/u/<ID>` | Auto-converts to direct API stream (`api/file/<ID>`). |
+| **GitLab / HuggingFace** | `https://gitlab.com/...` / `https://huggingface.co/.../resolve/...` | Direct CDN streaming. |
+| **Archive.org / SourceForge** | `https://archive.org/download/...` | Direct mirror download. |
+| **Multi-Mirror Failover** | `<url1>, <url2>, <url3>` | Comma-separated list for automatic redundancy and failover. |
+
+##### 💡 Maintainer Examples for Remote Packages:
+
+```bash
+# Example 1: Upload with Google Drive link
+./upload.sh -f ./burpsuite-pro.deb -n burpsuite-pro -v 2026.4.0 -o debian \
+  -m "https://drive.google.com/file/d/1d1erCEzsCfidqVH1Zhcyn5KHLUiOSNvn/view?usp=drive_link"
+
+# Example 2: Upload with Mega.nz encrypted link
+./upload.sh -f ./burpsuite-pro.deb -n burpsuite-pro -v 2026.4.0 -o debian \
+  -m "https://mega.nz/file/O1ABmDYS#FzdqQEUJZ3AeZugHA2D0AS9Jn1luYCy_9IZlJQE4M8U"
+
+# Example 3: Upload with DuckDNS / Apache server link
+./upload.sh -f ./burpsuite-pro.deb -n burpsuite-pro -v 2026.4.0 -o debian \
+  -m "https://jharkhand.duckdns.org/repo/burpsuite-pro_2026.3.3-1_amd64.deb"
+
+# Example 4: Upload with Local or Public IP server
+./upload.sh -f ./burpsuite-pro.deb -n burpsuite-pro -v 2026.4.0 -o debian \
+  -m "http://192.168.1.100:8080/repo/burpsuite-pro.deb"
+
+# Example 5: High-Availability Multi-Mirror Failover (Drive + Mega + DuckDNS)
+./upload.sh -f ./burpsuite-pro.deb -n burpsuite-pro -v 2026.4.0 -o debian \
+  -m "https://drive.google.com/file/d/1d1erCEzsCfidqVH1Zhcyn5KHLUiOSNvn/view?usp=drive_link, https://mega.nz/file/O1ABmDYS#FzdqQEUJZ3AeZugHA2D0AS9Jn1luYCy_9IZlJQE4M8U, https://jharkhand.duckdns.org/repo/burpsuite-pro_2026.3.3-1_amd64.deb"
+
+# Example 6: Direct remote upload without having local file (fetches & indexes directly)
+./upload.sh -f "https://mega.nz/file/O1ABmDYS#FzdqQEUJZ3AeZugHA2D0AS9Jn1luYCy_9IZlJQE4M8U" -n burpsuite-pro -v 2026.4.0 -o debian
+```
+
+##### 💻 How the End-User Installs:
+The end-user simply installs using standard APT:
+```bash
+sudo apt update
+sudo apt install burpsuite-pro
+```
+During installation:
+1. APT installs the verified lightweight wrapper.
+2. The bundled multi-provider downloader streams the payload from the remote host with a real-time progress bar and speed display.
+3. Cryptographic SHA256 integrity is strictly verified.
+4. Files are extracted and registered with `dpkg`.
+5. Desktop icons, launchers, and configs are created automatically!
 
 #### 🚀 Fully Automated Rollout & Local Disk Cleanup:
 At the end of upload, `upload.sh` automatically:
@@ -191,6 +248,8 @@ repo/
 │   ├── arch/            # Arch, Manjaro (.pkg.tar.zst)
 │   ├── universal/       # Standalone binaries / scripts
 │   └── registry.json    # Central repository metadata & package database
+├── scripts/
+│   └── downloader.py    # Multi-provider payload fetcher (Mega, GDrive, IP, TeraBox, etc.)
 ├── install.sh           # One-line curl installer for systems
 ├── uninstall.sh         # One-line curl uninstaller / cleaner
 ├── upload.sh            # Maintainer package upload & rollout manager

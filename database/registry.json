@@ -1,7 +1,7 @@
 {
   "repository": "SujitKumarBharti/repo",
   "base_url": "https://sujitkumarbharti.github.io/repo",
-  "updated_at": "2026-09-25T18:31:24.407889+00:00",
+  "updated_at": "2026-09-25T19:07:35.879524+00:00",
   "packages": [
     {
       "name": "omengaminghub",
@@ -37,17 +37,22 @@
       "os_type": "debian",
       "filename": "burpsuite-pro_2026.4.0.0-1.deb",
       "filepath": "database/debian/burpsuite-pro_2026.4.0.0-1.deb",
-      "sha256": "27eb2c61c2d550019545dc701ad516074971a73fe81645792f1817a4f4c65359",
-      "size": 3508,
-      "md5": "5ce58c4d58007f923c2320ef367affb7",
-      "sha1": "5b4d9f26e7045cbd478fe7f8539189f88a3b5f81",
+      "sha256": "60963fdaf03bf0ecfffefef734cc6c7a4eee8c5e40e0403b9b86f95ed20f198a",
+      "size": 9088,
+      "md5": "fdf0a9033c794d8d8e25b59a672fda49",
+      "sha1": "157b321447c47e25ecfe108e56b1c9f8dc614a11",
       "description": "Burp Suite Professional Edition",
-      "updated_at": "2026-09-25T18:31:24.407889+00:00",
+      "updated_at": "2026-09-25T19:07:35.879510+00:00",
       "is_remote": true,
-      "remote_url": "https://drive.usercontent.google.com/download?id=1d1erCEzsCfidqVH1Zhcyn5KHLUiOSNvn&export=download&confirm=t&uuid=08eb9980-3fb5-49d9-be48-b21f1d4a1650",
+      "remote_url": "https://drive.google.com/file/d/1d1erCEzsCfidqVH1Zhcyn5KHLUiOSNvn/view?usp=drive_link, https://mega.nz/file/O1ABmDYS#FzdqQEUJZ3AeZugHA2D0AS9Jn1luYCy_9IZlJQE4M8U, https://jharkhand.duckdns.org/repo/burpsuite-pro_2026.3.3-1_amd64.deb",
       "original_size": 678274636,
       "original_sha256": "126e58559b0530606d2c33bce74df9f524f46f6156363168941d94fc2c806d93",
-      "control_info": "Package: burpsuite-pro\nVersion: 2026.4.0.0-1\nSection: net\nPriority: optional\nArchitecture: amd64\nInstalled-Size: 676156\nMaintainer: bsilent <bsilent@localhost>\nDepends: curl | wget, ca-certificates, openjdk-21-jre | openjdk-21-jdk\nRecommends: libxrender1, libxtst6, libxi6\nHomepage: https://portswigger.net/burp\nDescription: Burp Suite Professional Edition\n An integrated platform and graphical tool for performing security testing\n of web applications.\n .\n This package includes:\n  - Burp Suite Professional (v2026.4.0.0)\n  - Burp Loader & Key Generator utility\n  - Desktop integration with application icons\n  - Dedicated 'burpsuite-pro' launcher with Java 21 auto-detection\n  - Built-in '-generatekey' command option\n"
+      "control_info": "Package: burpsuite-pro\nVersion: 2026.4.0.0-1\nSection: net\nPriority: optional\nArchitecture: amd64\nInstalled-Size: 676156\nMaintainer: bsilent <bsilent@localhost>\nDepends: python3, curl | wget, ca-certificates, openjdk-21-jre | openjdk-21-jdk\nRecommends: libxrender1, libxtst6, libxi6\nHomepage: https://portswigger.net/burp\nDescription: Burp Suite Professional Edition\n An integrated platform and graphical tool for performing security testing\n of web applications.\n .\n This package includes:\n  - Burp Suite Professional (v2026.4.0.0)\n  - Burp Loader & Key Generator utility\n  - Desktop integration with application icons\n  - Dedicated 'burpsuite-pro' launcher with Java 21 auto-detection\n  - Built-in '-generatekey' command option\n",
+      "remote_mirrors": [
+        "https://drive.google.com/file/d/1d1erCEzsCfidqVH1Zhcyn5KHLUiOSNvn/view?usp=drive_link",
+        "https://mega.nz/file/O1ABmDYS#FzdqQEUJZ3AeZugHA2D0AS9Jn1luYCy_9IZlJQE4M8U",
+        "https://jharkhand.duckdns.org/repo/burpsuite-pro_2026.3.3-1_amd64.deb"
+      ]
     }
   ]
 }

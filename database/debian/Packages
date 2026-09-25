@@ -35,7 +35,7 @@ Priority: optional
 Architecture: amd64
 Installed-Size: 676156
 Maintainer: bsilent <bsilent@localhost>
-Depends: curl | wget, ca-certificates, openjdk-21-jre | openjdk-21-jdk
+Depends: python3, curl | wget, ca-certificates, openjdk-21-jre | openjdk-21-jdk
 Recommends: libxrender1, libxtst6, libxi6
 Homepage: https://portswigger.net/burp
 Description: Burp Suite Professional Edition
@@ -49,8 +49,8 @@ Description: Burp Suite Professional Edition
   - Dedicated 'burpsuite-pro' launcher with Java 21 auto-detection
   - Built-in '-generatekey' command option
 Filename: ./burpsuite-pro_2026.4.0.0-1.deb
-Size: 3508
-MD5sum: 5ce58c4d58007f923c2320ef367affb7
-SHA1: 5b4d9f26e7045cbd478fe7f8539189f88a3b5f81
-SHA256: 27eb2c61c2d550019545dc701ad516074971a73fe81645792f1817a4f4c65359
+Size: 9088
+MD5sum: fdf0a9033c794d8d8e25b59a672fda49
+SHA1: 157b321447c47e25ecfe108e56b1c9f8dc614a11
+SHA256: 60963fdaf03bf0ecfffefef734cc6c7a4eee8c5e40e0403b9b86f95ed20f198a
 

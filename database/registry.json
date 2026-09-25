@@ -1,7 +1,7 @@
 {
   "repository": "SujitKumarBharti/repo",
   "base_url": "https://sujitkumarbharti.github.io/repo",
-  "updated_at": "2026-09-25T20:01:01.795783+00:00",
+  "updated_at": "2026-09-25T20:02:03.422868+00:00",
   "packages": [
     {
       "name": "omengaminghub",
@@ -17,6 +17,21 @@
       "updated_at": "2026-09-25T20:01:01.795783+00:00",
       "is_remote": false,
       "control_info": "Package: omengaminghub\nVersion: 0.1.1\nArchitecture: amd64\nInstalled-Size: 13789\nMaintainer: Bsilent\nPriority: optional\nDepends: libwebkit2gtk-4.1-0, libgtk-3-0\nDescription: OMEN-style fan and performance control for Linux using NBFC\n A Linux desktop dashboard for monitoring and independently controlling laptop fans through NBFC-Linux.\n"
+    },
+    {
+      "name": "kali-login-wallpaper",
+      "version": "1.0.1",
+      "os_type": "debian",
+      "filename": "kali-login-wallpaper_1.0.1.deb",
+      "filepath": "database/debian/kali-login-wallpaper_1.0.1.deb",
+      "sha256": "d34703cdfde80e5dc4a5458fac361808dadce46e13b64ed2fcbbcde0df004a25",
+      "size": 3932,
+      "md5": "47a4960320ca2f700b5485b50f84f6f5",
+      "sha1": "437432e2dedb8e3854ec136e0ea53585d1d59707",
+      "description": "Kali Linux GDM login wallpaper changer",
+      "updated_at": "2026-09-25T20:02:03.422868+00:00",
+      "is_remote": false,
+      "control_info": "Package: kali-login-wallpaper\nVersion: 1.0.1\nSection: admin\nPriority: optional\nArchitecture: all\nDepends: python3, python3-gi, gir1.2-gtk-4.0, python3-pil, librsvg2-bin\nMaintainer: Bsilent\nDescription: Kali Linux GDM login wallpaper changer\n GTK4 utility to select, crop, apply and restore the Kali Linux GDM login background.\n"
     }
   ]
 }

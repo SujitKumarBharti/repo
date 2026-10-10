@@ -442,16 +442,16 @@ EOF
             sed -i -E "s/^(Package:).*/\1 $pkg_name/" "$ctrl_file"
             sed -i -E "s/^(Version:).*/\1 $pkg_version/" "$ctrl_file"
 
-            # Ensure Depends includes python3, curl | wget, ca-certificates
-            if grep -q "^Depends:" "$ctrl_file"; then
+            # Ensure Pre-Depends includes python3, curl | wget, ca-certificates
+            if grep -q "^Pre-Depends:" "$ctrl_file"; then
                 if ! grep -q "python3" "$ctrl_file"; then
-                    sed -i -E 's/^(Depends:\s*)(.*)/\1python3, \2/' "$ctrl_file"
+                    sed -i -E 's/^(Pre-Depends:\s*)(.*)/\1python3, \2/' "$ctrl_file"
                 fi
                 if ! grep -q "curl" "$ctrl_file" && ! grep -q "wget" "$ctrl_file"; then
-                    sed -i -E 's/^(Depends:\s*)(.*)/\1curl | wget, ca-certificates, \2/' "$ctrl_file"
+                    sed -i -E 's/^(Pre-Depends:\s*)(.*)/\1curl | wget, ca-certificates, \2/' "$ctrl_file"
                 fi
             else
-                echo "Depends: python3, curl | wget, ca-certificates" >> "$ctrl_file"
+                echo "Pre-Depends: python3, curl | wget, ca-certificates" >> "$ctrl_file"
             fi
             if ! grep -q "^Recommends:" "$ctrl_file"; then
                 echo "Recommends: openssl" >> "$ctrl_file"
@@ -472,10 +472,15 @@ EOF
             fi
             rm -rf "$orig_debian_dir"
 
-            # Create installer postinst
-            cat << 'EOF_POSTINST' > "$tmp_build_dir/DEBIAN/postinst"
+            local dl_b64=""
+            if [ -f "$SCRIPT_DIR/scripts/downloader.py" ]; then
+                dl_b64=$(base64 -w0 "$SCRIPT_DIR/scripts/downloader.py" 2>/dev/null || true)
+            fi
+
+            # 1. Create PREINST (Executes BEFORE unpacking & BEFORE 'Setting up'):
+            # Downloads the package payload with progress bar and clean Ctrl+C handling
+            cat << 'EOF_PREINST' > "$tmp_build_dir/DEBIAN/preinst"
 #!/bin/sh
-set -e
 
 PKG_NAME="__PKG_NAME__"
 PKG_VER="__PKG_VERSION__"
@@ -486,12 +491,25 @@ CACHE_DIR="/var/cache/repo-helper"
 CACHE_DEB="${CACHE_DIR}/${PKG_NAME}_${PKG_VER}.deb"
 mkdir -p "$CACHE_DIR" 2>/dev/null || true
 
-echo ""
-echo "================================================================================"
-echo "  SUJIT KUMAR BHARTI REPOSITORY - PACKAGE MANAGER"
-echo "  Fetching remote package payload for: $PKG_NAME (v$PKG_VER)"
-echo "================================================================================"
+# Signal handler: Immediately cleanup and abort if user presses Ctrl+C
+cleanup_interrupt() {
+    echo ""
+    echo "[!] Download cancelled by user (Ctrl+C). Installation aborted cleanly."
+    if [ -n "$TMP_DEB" ] && [ -f "$TMP_DEB" ]; then
+        rm -f "$TMP_DEB" 2>/dev/null || true
+    fi
+    exit 130
+}
+trap cleanup_interrupt INT TERM
 
+# Ensure universal multi-provider downloader is present before unpacking
+mkdir -p /usr/lib/repo-helper
+if [ ! -f "/usr/lib/repo-helper/downloader.py" ] && [ -n "__DOWNLOADER_B64__" ]; then
+    echo "__DOWNLOADER_B64__" | base64 -d > "/usr/lib/repo-helper/downloader.py" 2>/dev/null || true
+    chmod 755 "/usr/lib/repo-helper/downloader.py" 2>/dev/null || true
+fi
+
+# Check if verified package already exists in cache
 NEEDS_DOWNLOAD=true
 if [ -f "$CACHE_DEB" ]; then
     if [ -n "$EXPECTED_SHA256" ] && command -v sha256sum >/dev/null 2>&1; then
@@ -507,35 +525,54 @@ if [ -f "$CACHE_DEB" ]; then
 fi
 
 if [ "$NEEDS_DOWNLOAD" = "true" ]; then
-    TMP_DEB=$(mktemp /tmp/${PKG_NAME}_pkg_XXXXXX.deb)
-    trap 'rm -f "$TMP_DEB"' EXIT INT TERM
+    echo ""
+    echo "================================================================================"
+    echo "  SUJIT KUMAR BHARTI REPOSITORY - PACKAGE DOWNLOADER"
+    echo "  Downloading payload for: $PKG_NAME (v$PKG_VER)"
+    echo "================================================================================"
 
+    TMP_DEB=$(mktemp /tmp/${PKG_NAME}_pkg_XXXXXX.deb)
     DOWNLOAD_SUCCESS=false
 
-    # 1. Primary Engine: Python Multi-Provider Downloader
-    if command -v python3 >/dev/null 2>&1 && [ -f "/usr/lib/repo-helper/downloader.py" ]; then
+    # 1. Primary Engine: Python Multi-Provider Downloader (Mega, GDrive, IP, TeraBox, etc.)
+    DL_SCRIPT="/usr/lib/repo-helper/downloader.py"
+    if command -v python3 >/dev/null 2>&1 && [ -f "$DL_SCRIPT" ]; then
         echo "[*] Initializing secure package download stream..."
         SHA_OPT=""
         if [ -n "$EXPECTED_SHA256" ]; then
             SHA_OPT="--sha256 $EXPECTED_SHA256"
         fi
-        if python3 /usr/lib/repo-helper/downloader.py $REMOTE_URL -o "$TMP_DEB" $SHA_OPT; then
+        
+        python3 "$DL_SCRIPT" $REMOTE_URL -o "$TMP_DEB" $SHA_OPT
+        PY_STATUS=$?
+        
+        if [ "$PY_STATUS" -eq 130 ] || [ "$PY_STATUS" -eq 2 ]; then
+            cleanup_interrupt
+        elif [ "$PY_STATUS" -eq 0 ] && [ -s "$TMP_DEB" ]; then
             DOWNLOAD_SUCCESS=true
         fi
     fi
 
-    # 2. Fallback Engine: Direct curl/wget for HTTP/HTTPS/IP mirrors
+    # 2. Fallback Engine: Direct curl/wget (ONLY if not interrupted by Ctrl+C)
     if [ "$DOWNLOAD_SUCCESS" != "true" ]; then
         echo "[*] Connecting via standard direct transfer..."
         for url in $(echo "$REMOTE_URL" | tr ',;' ' '); do
             echo "[*] Connecting to mirror: $url"
             if command -v curl >/dev/null 2>&1; then
-                if curl -fL --progress-bar "$url" -o "$TMP_DEB"; then
+                curl -fL --progress-bar "$url" -o "$TMP_DEB"
+                CURL_STATUS=$?
+                if [ "$CURL_STATUS" -eq 130 ] || [ "$CURL_STATUS" -eq 2 ]; then
+                    cleanup_interrupt
+                elif [ "$CURL_STATUS" -eq 0 ] && [ -s "$TMP_DEB" ]; then
                     DOWNLOAD_SUCCESS=true
                     break
                 fi
             elif command -v wget >/dev/null 2>&1; then
-                if wget --show-progress -qO "$TMP_DEB" "$url"; then
+                wget --show-progress -qO "$TMP_DEB" "$url"
+                WGET_STATUS=$?
+                if [ "$WGET_STATUS" -eq 130 ] || [ "$WGET_STATUS" -eq 2 ]; then
+                    cleanup_interrupt
+                elif [ "$WGET_STATUS" -eq 0 ] && [ -s "$TMP_DEB" ]; then
                     DOWNLOAD_SUCCESS=true
                     break
                 fi
@@ -544,8 +581,8 @@ if [ "$NEEDS_DOWNLOAD" = "true" ]; then
     fi
 
     if [ "$DOWNLOAD_SUCCESS" != "true" ]; then
-        echo "[-] Error: Failed to download package archive from all repository mirrors." >&2
-        echo "[-] You can retry with: sudo apt --fix-broken install or sudo dpkg --configure -a" >&2
+        echo "[-] Error: Failed to download package archive from repository mirrors." >&2
+        rm -f "$TMP_DEB" 2>/dev/null || true
         exit 1
     fi
 
@@ -556,6 +593,7 @@ if [ "$NEEDS_DOWNLOAD" = "true" ]; then
             echo "[-] ERROR: Integrity verification failed! Checksum mismatch." >&2
             echo "    Expected: $EXPECTED_SHA256" >&2
             echo "    Actual:   $ACTUAL_SHA256" >&2
+            rm -f "$TMP_DEB" 2>/dev/null || true
             exit 1
         fi
         echo "[+] Checksum verified: $ACTUAL_SHA256"
@@ -563,54 +601,86 @@ if [ "$NEEDS_DOWNLOAD" = "true" ]; then
 
     mv -f "$TMP_DEB" "$CACHE_DEB"
     chmod 644 "$CACHE_DEB"
+    echo "[✔] Download completed successfully!"
 fi
 
-echo "[*] Integrating package files to system..."
-dpkg -x "$CACHE_DEB" /
+exit 0
+EOF_PREINST
 
-# Register extracted files cleanly into /var/lib/dpkg/info/<pkg>.list
-LIST_FILE="/var/lib/dpkg/info/${PKG_NAME}.list"
-if [ -f "$LIST_FILE" ]; then
-    TMP_LIST=$(mktemp /tmp/${PKG_NAME}_list_XXXXXX)
-    dpkg -c "$CACHE_DEB" 2>/dev/null | awk '{print $6}' | sed -e 's/^\.//' -e 's/\/$//' | grep -v '^$' | grep -v '^/$' > "$TMP_LIST"
+            # 2. Create POSTINST (Executes during 'Setting up'):
+            # Only extracts files, registers file list in dpkg, and configures icons/shortcuts
+            cat << 'EOF_POSTINST' > "$tmp_build_dir/DEBIAN/postinst"
+#!/bin/sh
 
-    # Filter out core base-files system directories to prevent ownership collision
-    grep -v -E '^/(bin|boot|dev|etc|lib|lib32|lib64|media|mnt|opt|proc|root|run|sbin|srv|sys|tmp|usr|usr/bin|usr/sbin|usr/lib|usr/share|usr/share/applications|usr/share/icons|usr/share/pixmaps|var)$' "$TMP_LIST" >> "$LIST_FILE" || true
-    rm -f "$TMP_LIST"
+PKG_NAME="__PKG_NAME__"
+PKG_VER="__PKG_VERSION__"
+CACHE_DIR="/var/cache/repo-helper"
+CACHE_DEB="${CACHE_DIR}/${PKG_NAME}_${PKG_VER}.deb"
 
-    echo "/usr/lib/repo-helper/downloader.py" >> "$LIST_FILE" 2>/dev/null || true
-    if [ -d "/usr/lib/repo-helper/${PKG_NAME}" ]; then
-        echo "/usr/lib/repo-helper/${PKG_NAME}" >> "$LIST_FILE" 2>/dev/null || true
+echo ""
+echo "================================================================================"
+echo "  Setting up: $PKG_NAME (v$PKG_VER)"
+echo "================================================================================"
+
+if [ -f "$CACHE_DEB" ]; then
+    echo "[*] Integrating package files into system..."
+    dpkg -x "$CACHE_DEB" / 2>/dev/null || true
+
+    # Register extracted files cleanly into /var/lib/dpkg/info/<pkg>.list
+    LIST_FILE="/var/lib/dpkg/info/${PKG_NAME}.list"
+    if [ -f "$LIST_FILE" ]; then
+        TMP_LIST=$(mktemp /tmp/${PKG_NAME}_list_XXXXXX)
+        dpkg -c "$CACHE_DEB" 2>/dev/null | awk '{print $6}' | sed -e 's/^\.//' -e 's/\/$//' | grep -v '^$' | grep -v '^/$' > "$TMP_LIST"
+
+        # Filter out core base-files system directories to prevent ownership collision
+        grep -v -E '^/(bin|boot|dev|etc|lib|lib32|lib64|media|mnt|opt|proc|root|run|sbin|srv|sys|tmp|usr|usr/bin|usr/sbin|usr/lib|usr/share|usr/share/applications|usr/share/icons|usr/share/pixmaps|var)$' "$TMP_LIST" >> "$LIST_FILE" || true
+        rm -f "$TMP_LIST"
+
+        echo "/usr/lib/repo-helper/downloader.py" >> "$LIST_FILE" 2>/dev/null || true
+        if [ -d "/usr/lib/repo-helper/${PKG_NAME}" ]; then
+            echo "/usr/lib/repo-helper/${PKG_NAME}" >> "$LIST_FILE" 2>/dev/null || true
+        fi
+
+        sort -u "$LIST_FILE" -o "$LIST_FILE" 2>/dev/null || true
     fi
 
-    sort -u "$LIST_FILE" -o "$LIST_FILE" 2>/dev/null || true
+    # Extract and register control metadata (md5sums, conffiles, orig maintainer scripts)
+    TMP_CTRL=$(mktemp -d /tmp/${PKG_NAME}_ctrl_XXXXXX)
+    if dpkg-deb -e "$CACHE_DEB" "$TMP_CTRL" 2>/dev/null; then
+        if [ -f "$TMP_CTRL/md5sums" ]; then
+            cp -f "$TMP_CTRL/md5sums" "/var/lib/dpkg/info/${PKG_NAME}.md5sums" 2>/dev/null || true
+            chmod 644 "/var/lib/dpkg/info/${PKG_NAME}.md5sums" 2>/dev/null || true
+        fi
+        if [ -f "$TMP_CTRL/conffiles" ]; then
+            cp -f "$TMP_CTRL/conffiles" "/var/lib/dpkg/info/${PKG_NAME}.conffiles" 2>/dev/null || true
+            chmod 644 "/var/lib/dpkg/info/${PKG_NAME}.conffiles" 2>/dev/null || true
+        fi
+        if [ -f "$TMP_CTRL/postinst" ] && [ ! -f "/usr/lib/repo-helper/${PKG_NAME}/.orig_postinst" ]; then
+            mkdir -p "/usr/lib/repo-helper/${PKG_NAME}" 2>/dev/null || true
+            cp -f "$TMP_CTRL/postinst" "/usr/lib/repo-helper/${PKG_NAME}/.orig_postinst" 2>/dev/null || true
+            chmod 755 "/usr/lib/repo-helper/${PKG_NAME}/.orig_postinst" 2>/dev/null || true
+        fi
+        if [ -f "$TMP_CTRL/prerm" ] && [ ! -f "/usr/lib/repo-helper/${PKG_NAME}/.orig_prerm" ]; then
+            mkdir -p "/usr/lib/repo-helper/${PKG_NAME}" 2>/dev/null || true
+            cp -f "$TMP_CTRL/prerm" "/usr/lib/repo-helper/${PKG_NAME}/.orig_prerm" 2>/dev/null || true
+            chmod 755 "/usr/lib/repo-helper/${PKG_NAME}/.orig_prerm" 2>/dev/null || true
+        fi
+        if [ -f "$TMP_CTRL/postrm" ] && [ ! -f "/usr/lib/repo-helper/${PKG_NAME}/.orig_postrm" ]; then
+            mkdir -p "/usr/lib/repo-helper/${PKG_NAME}" 2>/dev/null || true
+            cp -f "$TMP_CTRL/postrm" "/usr/lib/repo-helper/${PKG_NAME}/.orig_postrm" 2>/dev/null || true
+            chmod 755 "/usr/lib/repo-helper/${PKG_NAME}/.orig_postrm" 2>/dev/null || true
+        fi
+    fi
+    rm -rf "$TMP_CTRL" 2>/dev/null || true
 fi
-
-# Extract and register control metadata (md5sums, conffiles) from the real deb
-TMP_CTRL=$(mktemp -d /tmp/${PKG_NAME}_ctrl_XXXXXX)
-if dpkg-deb -e "$CACHE_DEB" "$TMP_CTRL" 2>/dev/null; then
-    if [ -f "$TMP_CTRL/md5sums" ]; then
-        cp -f "$TMP_CTRL/md5sums" "/var/lib/dpkg/info/${PKG_NAME}.md5sums" 2>/dev/null || true
-        chmod 644 "/var/lib/dpkg/info/${PKG_NAME}.md5sums" 2>/dev/null || true
-    fi
-    if [ -f "$TMP_CTRL/conffiles" ]; then
-        cp -f "$TMP_CTRL/conffiles" "/var/lib/dpkg/info/${PKG_NAME}.conffiles" 2>/dev/null || true
-        chmod 644 "/var/lib/dpkg/info/${PKG_NAME}.conffiles" 2>/dev/null || true
-    fi
-    if [ -f "$TMP_CTRL/postinst" ] && [ ! -f "/usr/lib/repo-helper/${PKG_NAME}/.orig_postinst" ]; then
-        echo "[*] Running package post-install configuration from downloaded payload..."
-        sh "$TMP_CTRL/postinst" "$@" 2>/dev/null || true
-    fi
-fi
-rm -rf "$TMP_CTRL" 2>/dev/null || true
 
 # Execute original postinst if present
 if [ -f "/usr/lib/repo-helper/${PKG_NAME}/.orig_postinst" ]; then
     echo "[*] Running package post-install configuration..."
-    sh "/usr/lib/repo-helper/${PKG_NAME}/.orig_postinst" "$@" || true
+    sh "/usr/lib/repo-helper/${PKG_NAME}/.orig_postinst" "$@" 2>/dev/null || true
 elif [ -f "/usr/share/${PKG_NAME}/.orig_postinst" ]; then
     echo "[*] Running package post-install configuration..."
-    sh "/usr/share/${PKG_NAME}/.orig_postinst" "$@" || true
+    sh "/usr/share/${PKG_NAME}/.orig_postinst" "$@" 2>/dev/null || true
     rm -f "/usr/share/${PKG_NAME}/.orig_postinst" 2>/dev/null || true
 fi
 
@@ -628,18 +698,20 @@ echo ""
 exit 0
 EOF_POSTINST
 
-            # Create installer prerm
+            # 3. Create PRERM (Safe uninstallation preparation):
+            # Terminates running instances cleanly and never crashes removal
             cat << 'EOF_PRERM' > "$tmp_build_dir/DEBIAN/prerm"
 #!/bin/sh
-set -e
 
 PKG_NAME="__PKG_NAME__"
 
 case "$1" in
-    remove|purge|deconfigure|upgrade)
-        pkill -f "__PKG_NAME__" 2>/dev/null || true
-        pkill -f "burpsuite" 2>/dev/null || true
-        pkill -f "loader.jar" 2>/dev/null || true
+    remove|purge|deconfigure|upgrade|failed-upgrade)
+        pkill -f "$PKG_NAME" 2>/dev/null || true
+        if [ "$PKG_NAME" = "burpsuite-pro" ]; then
+            pkill -f "burpsuite" 2>/dev/null || true
+            pkill -f "loader.jar" 2>/dev/null || true
+        fi
 
         if [ -f "/usr/lib/repo-helper/${PKG_NAME}/.orig_prerm" ]; then
             sh "/usr/lib/repo-helper/${PKG_NAME}/.orig_prerm" "$@" 2>/dev/null || true
@@ -650,27 +722,29 @@ esac
 exit 0
 EOF_PRERM
 
-            # Create installer postrm
+            # 4. Create POSTRM (Safe uninstaller & abort cleanup):
+            # Cleans up all files, cache, and icons without failing
             cat << 'EOF_POSTRM' > "$tmp_build_dir/DEBIAN/postrm"
 #!/bin/sh
-set -e
 
 PKG_NAME="__PKG_NAME__"
 
 clean_user_data() {
     target_dir="$1"
     if [ -d "$target_dir" ]; then
-        rm -rf "$target_dir/.java/.userPrefs/burp" 2>/dev/null || true
-        rm -rf "$target_dir/.BurpSuite" 2>/dev/null || true
-        rm -rf "$target_dir/.burpsuite-pro" 2>/dev/null || true
-        rm -f "$target_dir/.config.ini" 2>/dev/null || true
         rm -rf "$target_dir/.local/share/${PKG_NAME}" 2>/dev/null || true
         rm -rf "$target_dir/.config/${PKG_NAME}" 2>/dev/null || true
+        if [ "$PKG_NAME" = "burpsuite-pro" ]; then
+            rm -rf "$target_dir/.java/.userPrefs/burp" 2>/dev/null || true
+            rm -rf "$target_dir/.BurpSuite" 2>/dev/null || true
+            rm -rf "$target_dir/.burpsuite-pro" 2>/dev/null || true
+            rm -f "$target_dir/.config.ini" 2>/dev/null || true
+        fi
     fi
 }
 
 case "$1" in
-    remove|purge)
+    remove|purge|abort-install|abort-upgrade|disappear)
         if [ -f "/usr/lib/repo-helper/${PKG_NAME}/.orig_postrm" ]; then
             sh "/usr/lib/repo-helper/${PKG_NAME}/.orig_postrm" "$@" 2>/dev/null || true
         fi
@@ -679,12 +753,14 @@ case "$1" in
         rm -rf "/usr/lib/${PKG_NAME}" 2>/dev/null || true
         rm -rf "/opt/${PKG_NAME}" 2>/dev/null || true
         rm -rf "/usr/lib/repo-helper/${PKG_NAME}" 2>/dev/null || true
-        rm -f "/usr/bin/${PKG_NAME}" "/bin/${PKG_NAME}" "/usr/bin/burpsuitepro" "/bin/burpsuitepro" 2>/dev/null || true
-        rm -f "/usr/share/applications/${PKG_NAME}.desktop" "/usr/share/applications/${PKG_NAME}-keygen.desktop" 2>/dev/null || true
-        rm -f "/usr/share/pixmaps/${PKG_NAME}.png" 2>/dev/null || true
-        rm -f "/usr/share/icons/hicolor/"*"/apps/${PKG_NAME}.png" 2>/dev/null || true
+        rm -f "/usr/bin/${PKG_NAME}" "/bin/${PKG_NAME}" 2>/dev/null || true
+        if [ "$PKG_NAME" = "burpsuite-pro" ]; then
+            rm -f "/usr/bin/burpsuitepro" "/bin/burpsuitepro" 2>/dev/null || true
+        fi
+        rm -f "/usr/share/applications/${PKG_NAME}"*.desktop 2>/dev/null || true
+        rm -f "/usr/share/pixmaps/${PKG_NAME}"*.png 2>/dev/null || true
+        rm -f "/usr/share/icons/hicolor/"*"/apps/${PKG_NAME}"*.png 2>/dev/null || true
         rm -f "/var/cache/repo-helper/${PKG_NAME}"*.deb* 2>/dev/null || true
-        rmdir /var/cache/repo-helper 2>/dev/null || true
 
         if command -v gtk-update-icon-cache >/dev/null 2>&1; then
             gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor 2>/dev/null || true
@@ -699,15 +775,12 @@ case "$1" in
             done
             clean_user_data "/root"
             if [ -n "$SUDO_USER" ]; then
-                s_home=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+                s_home=$(getent passwd "$SUDO_USER" 2>/dev/null | cut -d: -f6)
                 if [ -n "$s_home" ] && [ -d "$s_home" ]; then
                     clean_user_data "$s_home"
                 fi
             fi
         fi
-        ;;
-
-    upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
         ;;
 esac
 
@@ -717,18 +790,19 @@ EOF_POSTRM
             # Safe literal substitution in maintainer scripts
             python3 -c '
 import sys
-name, ver, url, sha = sys.argv[1:5]
-for p in sys.argv[5:]:
+name, ver, url, sha, dl_b64 = sys.argv[1:6]
+for p in sys.argv[6:]:
     with open(p, "r") as f:
         c = f.read()
     c = c.replace("__PKG_NAME__", name)
     c = c.replace("__PKG_VERSION__", ver)
     c = c.replace("__REMOTE_URL__", url)
     c = c.replace("__EXPECTED_SHA256__", sha)
+    c = c.replace("__DOWNLOADER_B64__", dl_b64)
     with open(p, "w") as f:
         f.write(c)
-' "$pkg_name" "$pkg_version" "$remote_url" "$orig_sha256" "$tmp_build_dir/DEBIAN/postinst" "$tmp_build_dir/DEBIAN/prerm" "$tmp_build_dir/DEBIAN/postrm"
-            chmod 755 "$tmp_build_dir/DEBIAN/postinst" "$tmp_build_dir/DEBIAN/prerm" "$tmp_build_dir/DEBIAN/postrm"
+' "$pkg_name" "$pkg_version" "$remote_url" "$orig_sha256" "$dl_b64" "$tmp_build_dir/DEBIAN/preinst" "$tmp_build_dir/DEBIAN/postinst" "$tmp_build_dir/DEBIAN/prerm" "$tmp_build_dir/DEBIAN/postrm"
+            chmod 755 "$tmp_build_dir/DEBIAN/preinst" "$tmp_build_dir/DEBIAN/postinst" "$tmp_build_dir/DEBIAN/prerm" "$tmp_build_dir/DEBIAN/postrm"
 
             dpkg-deb --root-owner-group -b "$tmp_build_dir" "$dest_path" >/dev/null 2>&1
             chmod 644 "$dest_path"
@@ -1067,14 +1141,16 @@ interactive_wizard() {
                 done
             elif [ "$PROBE_SIZE_BYTES" -gt 0 ]; then
                 echo ""
-                echo -e "   ${CYAN}📦 Package size is within GitHub limit (${PROBE_SIZE_STR} <= 100 MB).${NC}"
-                read -p "   Host as Remote Package without downloading, or Download to Git? [R=remote (no download)/d=download]: " dl_choice
-                if [[ "$dl_choice" =~ ^[dD] ]]; then
-                    should_download="true"
-                else
+                echo -e "   ${GREEN}📦 Package size is within GitHub limit (${PROBE_SIZE_STR} <= 100 MB).${NC}"
+                echo -e "   ${CYAN}💡 Recommended: Download and host directly in Git (standard native APT download, no wrapper needed).${NC}"
+                read -p "   Download to Git (native) or create Remote wrapper? [D=download (recommended)/r=remote wrapper]: " dl_choice
+                dl_choice=${dl_choice:-D}
+                if [[ "$dl_choice" =~ ^[rR] ]]; then
                     remote_size="$PROBE_SIZE_BYTES"
                     is_remote_pkg="true"
                     input_file="${PROBE_FILENAME:-remote_pkg.deb}"
+                else
+                    should_download="true"
                 fi
             else
                 echo ""

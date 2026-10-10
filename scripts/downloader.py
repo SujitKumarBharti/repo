@@ -355,6 +355,11 @@ def download_with_failover(urls, dest_path, expected_sha256=None):
             if os.path.exists(dest_path) and os.path.getsize(dest_path) > 0:
                 print(f"[✔] Package download completed successfully.")
                 return True
+        except KeyboardInterrupt:
+            if os.path.exists(dest_path):
+                try: os.remove(dest_path)
+                except: pass
+            raise
         except Exception as e:
             last_error = e
             print(f"[!] Warning: Mirror {idx} temporarily unavailable ({e})")
@@ -591,6 +596,12 @@ def main():
 
     try:
         download_with_failover(args.urls, args.output, args.sha256)
+    except KeyboardInterrupt:
+        print("\n\n[!] Download aborted by user (Ctrl+C).", file=sys.stderr)
+        if args.output and os.path.exists(args.output):
+            try: os.remove(args.output)
+            except: pass
+        sys.exit(130)
     except Exception as e:
         print(f"\n[-] ERROR: {e}", file=sys.stderr)
         sys.exit(1)

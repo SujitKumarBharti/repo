@@ -367,6 +367,185 @@ def download_with_failover(urls, dest_path, expected_sha256=None):
 
     raise RuntimeError(f"All mirrors failed to download package. Last error: {last_error}")
 
+def parse_size_str(s):
+    if not s:
+        return 0
+    m = re.match(r"^([\d.]+)\s*([kmgtp]?b?)$", s.strip(), re.IGNORECASE)
+    if not m:
+        return 0
+    val = float(m.group(1))
+    unit = m.group(2).upper()
+    multiplier = 1
+    if "K" in unit:
+        multiplier = 1024
+    elif "M" in unit:
+        multiplier = 1024 * 1024
+    elif "G" in unit:
+        multiplier = 1024 * 1024 * 1024
+    elif "T" in unit:
+        multiplier = 1024 * 1024 * 1024 * 1024
+    return int(val * multiplier)
+
+def probe_remote_url(raw_url):
+    cleaned = [u.strip() for u in re.split(r"[\s,;]+", raw_url) if u.strip()]
+    if not cleaned:
+        return {"url": raw_url, "provider": "Unknown", "filename": "", "size_bytes": 0, "size_str": "Unknown", "is_large": False}
+    u = cleaned[0]
+    provider = identify_provider(u)
+    res = {
+        "url": u,
+        "provider": provider,
+        "filename": "",
+        "size_bytes": 0,
+        "size_str": "Unknown",
+        "is_large": False
+    }
+
+    cj = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+
+    try:
+        if "drive.google.com" in u or "docs.google.com" in u:
+            m = re.search(r"[-_\w]{25,}", u)
+            if m:
+                fid = m.group(0)
+                init_url = f"https://drive.google.com/uc?id={fid}&export=download"
+                req = urllib.request.Request(init_url, headers={"User-Agent": USER_AGENT})
+                resp = opener.open(req, timeout=15)
+                cd = resp.headers.get("Content-Disposition", "")
+                if "filename=" in cd:
+                    fns = re.findall(r"filename\*?=(?:UTF-8\'\')?\"?([^\";]+)\"?", cd)
+                    if fns:
+                        res["filename"] = fns[0]
+                cl = resp.headers.get("Content-Length")
+                if cl and cl.isdigit():
+                    res["size_bytes"] = int(cl)
+
+                peek = resp.read(65536)
+                html = peek.decode("utf-8", errors="ignore")
+                fn_m = re.search(r"class=[\"\']uc-name-size[\"\']?>.*?<a[^>]*>([^<]+)</a>\s*\(([^)]+)\)", html, re.DOTALL) or re.search(r"download-file-name[\"\']?>([^<]+)<", html)
+                if fn_m:
+                    if len(fn_m.groups()) >= 2:
+                        res["filename"] = fn_m.group(1).strip()
+                        raw_size = fn_m.group(2).strip()
+                        res["size_bytes"] = parse_size_str(raw_size)
+                        res["size_str"] = format_size(res["size_bytes"]) if res["size_bytes"] > 0 else raw_size
+                    else:
+                        res["filename"] = fn_m.group(1).strip()
+                    res["is_large"] = True
+                elif res["size_bytes"] > 0:
+                    res["size_str"] = format_size(res["size_bytes"])
+                    if res["size_bytes"] > 100 * 1024 * 1024:
+                        res["is_large"] = True
+
+        elif "mega.nz" in u or "mega.co.nz" in u:
+            m = re.search(r"mega\.(?:nz|co\.nz)/(?:file/|#!)?([a-zA-Z0-9_-]+)[#!]([a-zA-Z0-9_-]+)", u)
+            if m:
+                file_id, file_key = m.group(1), m.group(2)
+                api_url = "https://g.api.mega.co.nz/cs"
+                post_data = json.dumps([{"a": "g", "g": 1, "ssl": 2, "p": file_id}]).encode('utf-8')
+                req = urllib.request.Request(api_url, data=post_data, headers={"Content-Type": "application/json", "User-Agent": USER_AGENT})
+                resp = urllib.request.urlopen(req, timeout=15)
+                mega_res = json.loads(resp.read().decode('utf-8'))
+                if isinstance(mega_res, list) and mega_res and "s" in mega_res[0]:
+                    s = mega_res[0]["s"]
+                    res["size_bytes"] = int(s)
+                    res["size_str"] = format_size(res["size_bytes"])
+                    if res["size_bytes"] > 100 * 1024 * 1024:
+                        res["is_large"] = True
+                    if "at" in mega_res[0]:
+                        try:
+                            data = file_key + '=' * ((4 - len(file_key) % 4) % 4)
+                            key_bytes = base64.urlsafe_b64decode(data)
+                            if len(key_bytes) % 4 != 0: key_bytes += b'\0' * (4 - len(key_bytes) % 4)
+                            k = [struct.unpack('>I', key_bytes[i:i+4])[0] for i in range(0, len(key_bytes), 4)]
+                            key_aes = b''.join(struct.pack('>I', x) for x in (k[0] ^ k[4], k[1] ^ k[5], k[2] ^ k[6], k[3] ^ k[7]))
+                            at_data = base64.urlsafe_b64decode(mega_res[0]["at"] + '==')
+                            p = subprocess.Popen(["openssl", "enc", "-d", "-aes-128-cbc", "-K", key_aes.hex(), "-iv", "0"*32, "-nopad"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                            out, _ = p.communicate(input=at_data)
+                            if out.startswith(b"MEGA"):
+                                meta_json = json.loads(out[4:].rstrip(b"\0").decode("utf-8", errors="ignore"))
+                                res["filename"] = meta_json.get("n", "")
+                        except Exception:
+                            pass
+
+        elif "pixeldrain.com" in u:
+            m = re.search(r"pixeldrain\.com/u/([a-zA-Z0-9_-]+)", u)
+            if m:
+                info_url = f"https://pixeldrain.com/api/file/{m.group(1)}/info"
+                req = urllib.request.Request(info_url, headers={"User-Agent": USER_AGENT})
+                resp = urllib.request.urlopen(req, timeout=10)
+                info = json.loads(resp.read().decode("utf-8"))
+                res["filename"] = info.get("name", "")
+                res["size_bytes"] = int(info.get("size", 0))
+                res["size_str"] = format_size(res["size_bytes"])
+                if res["size_bytes"] > 100 * 1024 * 1024:
+                    res["is_large"] = True
+
+        elif "dropbox.com" in u:
+            dl_url = re.sub(r"[?&]dl=0", "", u)
+            dl_url += ("&" if "?" in dl_url else "?") + "dl=1"
+            req = urllib.request.Request(dl_url, headers={"User-Agent": USER_AGENT}, method="HEAD")
+            resp = opener.open(req, timeout=10)
+            cd = resp.headers.get("Content-Disposition", "")
+            if "filename=" in cd:
+                fns = re.findall(r"filename\*?=(?:UTF-8\'\')?\"?([^\";]+)\"?", cd)
+                if fns: res["filename"] = fns[0]
+            cl = resp.headers.get("Content-Length")
+            if cl and cl.isdigit():
+                res["size_bytes"] = int(cl)
+                res["size_str"] = format_size(res["size_bytes"])
+                if res["size_bytes"] > 100 * 1024 * 1024:
+                    res["is_large"] = True
+
+        else:
+            target = u
+            if not re.match(r"^https?://", target):
+                target = ("http://" if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}", target) else "https://") + target
+            
+            parsed = urllib.parse.urlparse(target)
+            path_file = os.path.basename(parsed.path)
+            if path_file and "." in path_file:
+                res["filename"] = urllib.parse.unquote(path_file)
+
+            req = urllib.request.Request(target, headers={"User-Agent": USER_AGENT}, method="HEAD")
+            try:
+                resp = opener.open(req, timeout=10)
+            except Exception:
+                req2 = urllib.request.Request(target, headers={"User-Agent": USER_AGENT, "Range": "bytes=0-0"})
+                resp = opener.open(req2, timeout=10)
+
+            cd = resp.headers.get("Content-Disposition", "")
+            if "filename=" in cd:
+                fns = re.findall(r"filename\*?=(?:UTF-8\'\')?\"?([^\";]+)\"?", cd)
+                if fns: res["filename"] = fns[0]
+            
+            cr = resp.headers.get("Content-Range", "")
+            cl = resp.headers.get("Content-Length")
+            if cr and "/" in cr:
+                total = cr.split("/")[-1].strip()
+                if total.isdigit():
+                    res["size_bytes"] = int(total)
+            elif cl and cl.isdigit() and resp.status != 206:
+                res["size_bytes"] = int(cl)
+            
+            if res["size_bytes"] > 0:
+                res["size_str"] = format_size(res["size_bytes"])
+                if res["size_bytes"] > 100 * 1024 * 1024:
+                    res["is_large"] = True
+
+    except Exception:
+        if not res["filename"]:
+            parsed = urllib.parse.urlparse(u)
+            path_file = os.path.basename(parsed.path)
+            if path_file and "." in path_file:
+                res["filename"] = urllib.parse.unquote(path_file)
+
+    if res["filename"]:
+        res["filename"] = re.sub(r"[?#].*$", "", res["filename"]).strip("\"'")
+
+    return res
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Universal Linux Repository Multi-Provider Downloader")
@@ -374,6 +553,8 @@ def main():
     parser.add_argument("-o", "--output", help="Destination output file path (required for downloading)")
     parser.add_argument("--sha256", help="Expected SHA256 checksum for verification")
     parser.add_argument("--info", action="store_true", help="Print provider info and exit")
+    parser.add_argument("--probe", action="store_true", help="Probe remote URL metadata without downloading (outputs JSON)")
+    parser.add_argument("--probe-env", action="store_true", help="Probe remote URL metadata without downloading (outputs bash eval format)")
     args = parser.parse_args()
 
     if args.info:
@@ -386,6 +567,23 @@ def main():
         for u in cleaned:
             print(f"URL:      {u}")
             print(f"Provider: {identify_provider(u)}\n")
+        sys.exit(0)
+
+    if args.probe or args.probe_env:
+        probe_res = probe_remote_url(args.urls[0])
+        if args.probe_env:
+            fn = probe_res.get("filename", "").replace('"', '\\"')
+            prov = probe_res.get("provider", "Unknown").replace('"', '\\"')
+            sb = probe_res.get("size_bytes", 0)
+            ss = probe_res.get("size_str", "Unknown").replace('"', '\\"')
+            isl = "true" if probe_res.get("is_large", False) else "false"
+            print(f'PROBE_PROVIDER="{prov}"')
+            print(f'PROBE_FILENAME="{fn}"')
+            print(f'PROBE_SIZE_BYTES={sb}')
+            print(f'PROBE_SIZE_STR="{ss}"')
+            print(f'PROBE_IS_LARGE="{isl}"')
+        else:
+            print(json.dumps(probe_res, indent=2))
         sys.exit(0)
 
     if not args.output:

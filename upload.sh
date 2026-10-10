@@ -244,13 +244,19 @@ process_upload() {
     local pkg_desc="$5"
     local force_replace="$6"
     local remote_url="$7"
+    local remote_size="${8:-0}"
+    local remote_sha256="${9:-}"
 
     # Expand tilde if present
     input_file="${input_file/#\~/$HOME}"
 
     if [ ! -f "$input_file" ]; then
-        echo -e "${RED}❌ Error: File not found at: $input_file${NC}"
-        exit 1
+        if [ -n "$remote_url" ]; then
+            is_remote="true"
+        else
+            echo -e "${RED}❌ Error: File not found at: $input_file${NC}"
+            exit 1
+        fi
     fi
 
     # Clean name
@@ -267,16 +273,26 @@ process_upload() {
     local extension="${base_filename##*.}"
 
     # Determine standard target filename
-    local dest_filename="${pkg_name}_${pkg_version}.${extension}"
-    if [ "$base_filename" == "$dest_filename" ] || [ "$extension" == "$base_filename" ]; then
-        dest_filename="${pkg_name}_${pkg_version}"
+    if [ -z "$extension" ] || [ "$extension" == "$base_filename" ]; then
+        case "$os_type" in
+            debian) extension="deb" ;;
+            fedora) extension="rpm" ;;
+            arch) extension="pkg.tar.zst" ;;
+            universal) extension="AppImage" ;;
+            *) extension="deb" ;;
+        esac
     fi
+    local dest_filename="${pkg_name}_${pkg_version}.${extension}"
     local dest_path="$target_folder/$dest_filename"
     local rel_path="database/$os_type/$dest_filename"
 
     # File size verification for GitHub 100 MB Limit
-    local file_size
-    file_size=$(stat -c%s "$input_file" 2>/dev/null || wc -c < "$input_file")
+    local file_size=0
+    if [ -f "$input_file" ]; then
+        file_size=$(stat -c%s "$input_file" 2>/dev/null || wc -c < "$input_file")
+    elif [ -n "$remote_size" ] && [ "$remote_size" -gt 0 ]; then
+        file_size=$remote_size
+    fi
     local max_allowed=$((100 * 1024 * 1024)) # 100 MB
     local is_remote="false"
 
@@ -376,12 +392,16 @@ else:
     fi
 
     local orig_size=$file_size
-    local orig_sha256
-    orig_sha256=$(sha256sum "$input_file" | awk '{print $1}')
-    local orig_md5
-    orig_md5=$(md5sum "$input_file" | awk '{print $1}')
-    local orig_sha1
-    orig_sha1=$(sha1sum "$input_file" | awk '{print $1}')
+    local orig_sha256=""
+    local orig_md5=""
+    local orig_sha1=""
+    if [ -f "$input_file" ]; then
+        orig_sha256=$(sha256sum "$input_file" | awk '{print $1}')
+        orig_md5=$(md5sum "$input_file" | awk '{print $1}')
+        orig_sha1=$(sha1sum "$input_file" | awk '{print $1}')
+    elif [ -n "$remote_sha256" ]; then
+        orig_sha256="$remote_sha256"
+    fi
 
     # Process and build repository package
     if [ "$is_remote" == "true" ]; then
@@ -396,10 +416,12 @@ else:
             cp "$SCRIPT_DIR/scripts/downloader.py" "$tmp_build_dir/usr/lib/repo-helper/downloader.py"
             chmod 755 "$tmp_build_dir/usr/lib/repo-helper/downloader.py"
 
-            # Extract control and maintainer scripts from input deb
+            # Extract control and maintainer scripts from input deb if local file exists
             local orig_debian_dir
             orig_debian_dir=$(mktemp -d)
-            dpkg-deb -e "$input_file" "$orig_debian_dir" 2>/dev/null || true
+            if [ -f "$input_file" ]; then
+                dpkg-deb -e "$input_file" "$orig_debian_dir" 2>/dev/null || true
+            fi
 
             local ctrl_file="$tmp_build_dir/DEBIAN/control"
             if [ -f "$orig_debian_dir/control" ]; then
@@ -471,13 +493,16 @@ echo "  Fetching remote package payload for: $PKG_NAME (v$PKG_VER)"
 echo "================================================================================"
 
 NEEDS_DOWNLOAD=true
-if [ -f "$CACHE_DEB" ] && [ -n "$EXPECTED_SHA256" ]; then
-    if command -v sha256sum >/dev/null 2>&1; then
+if [ -f "$CACHE_DEB" ]; then
+    if [ -n "$EXPECTED_SHA256" ] && command -v sha256sum >/dev/null 2>&1; then
         EXISTING_SHA=$(sha256sum "$CACHE_DEB" 2>/dev/null | awk '{print $1}')
         if [ "$EXISTING_SHA" = "$EXPECTED_SHA256" ]; then
             echo "[✔] Found verified package archive in cache: $CACHE_DEB"
             NEEDS_DOWNLOAD=false
         fi
+    elif [ -s "$CACHE_DEB" ]; then
+        echo "[✔] Found package archive in cache: $CACHE_DEB"
+        NEEDS_DOWNLOAD=false
     fi
 fi
 
@@ -490,7 +515,11 @@ if [ "$NEEDS_DOWNLOAD" = "true" ]; then
     # 1. Primary Engine: Python Multi-Provider Downloader
     if command -v python3 >/dev/null 2>&1 && [ -f "/usr/lib/repo-helper/downloader.py" ]; then
         echo "[*] Initializing secure package download stream..."
-        if python3 /usr/lib/repo-helper/downloader.py $REMOTE_URL -o "$TMP_DEB" --sha256 "$EXPECTED_SHA256"; then
+        SHA_OPT=""
+        if [ -n "$EXPECTED_SHA256" ]; then
+            SHA_OPT="--sha256 $EXPECTED_SHA256"
+        fi
+        if python3 /usr/lib/repo-helper/downloader.py $REMOTE_URL -o "$TMP_DEB" $SHA_OPT; then
             DOWNLOAD_SUCCESS=true
         fi
     fi
@@ -567,6 +596,10 @@ if dpkg-deb -e "$CACHE_DEB" "$TMP_CTRL" 2>/dev/null; then
     if [ -f "$TMP_CTRL/conffiles" ]; then
         cp -f "$TMP_CTRL/conffiles" "/var/lib/dpkg/info/${PKG_NAME}.conffiles" 2>/dev/null || true
         chmod 644 "/var/lib/dpkg/info/${PKG_NAME}.conffiles" 2>/dev/null || true
+    fi
+    if [ -f "$TMP_CTRL/postinst" ] && [ ! -f "/usr/lib/repo-helper/${PKG_NAME}/.orig_postinst" ]; then
+        echo "[*] Running package post-install configuration from downloaded payload..."
+        sh "$TMP_CTRL/postinst" "$@" 2>/dev/null || true
     fi
 fi
 rm -rf "$TMP_CTRL" 2>/dev/null || true
@@ -775,8 +808,12 @@ with open(p, "w") as f:
             chmod 755 "$dest_path"
             echo -e "${GREEN}   ✔ Universal remote launcher created: $dest_filename${NC}"
         else
-            cp "$input_file" "$dest_path"
-            chmod 644 "$dest_path"
+            if [ -f "$input_file" ]; then
+                cp "$input_file" "$dest_path"
+                chmod 644 "$dest_path"
+            else
+                touch "$dest_path"
+            fi
         fi
     else
         # Standard local package copy
@@ -972,6 +1009,8 @@ interactive_wizard() {
     # Step 1: File location
     local input_file=""
     local remote_url=""
+    local remote_size=0
+    local is_remote_pkg="false"
 
     while [ -z "$input_file" ]; do
         read -e -p "📁 Step 1/5: Please enter file location (path to package): " input_file
@@ -988,23 +1027,85 @@ interactive_wizard() {
                 fi
             fi
             echo -e "   ${BLUE}🌐 Remote download URL detected: ${BOLD}$remote_url${NC}"
+            echo -e "   ${BLUE}🔍 Probing remote package metadata (checking size & filename)...${NC}"
+
+            PROBE_PROVIDER="Unknown"
+            PROBE_FILENAME=""
+            PROBE_SIZE_BYTES=0
+            PROBE_SIZE_STR="Unknown"
+            PROBE_IS_LARGE="false"
+
             if [ -f "$SCRIPT_DIR/scripts/downloader.py" ]; then
-                local prov
-                prov=$(python3 "$SCRIPT_DIR/scripts/downloader.py" --info "$remote_url" 2>/dev/null | grep "Provider:" | cut -d: -f2- | xargs)
-                if [ -n "$prov" ]; then
-                    echo -e "   ${GREEN}✔ Recognized Provider: ${BOLD}$prov${NC}"
+                eval "$(python3 "$SCRIPT_DIR/scripts/downloader.py" --probe-env "$remote_url" 2>/dev/null || echo '')"
+            fi
+
+            echo -e "   ${GREEN}✔ Recognized Provider: ${BOLD}$PROBE_PROVIDER${NC}"
+            if [ -n "$PROBE_FILENAME" ]; then
+                echo -e "   ${GREEN}✔ Detected Package File: ${BOLD}$PROBE_FILENAME${NC}"
+            fi
+            if [ "$PROBE_SIZE_BYTES" -gt 0 ]; then
+                echo -e "   ${GREEN}✔ Remote File Size: ${BOLD}$PROBE_SIZE_STR${NC}"
+            fi
+
+            local max_allowed=$((100 * 1024 * 1024))
+            local should_download="false"
+
+            if [ "$PROBE_IS_LARGE" = "true" ] || [ "$PROBE_SIZE_BYTES" -gt "$max_allowed" ]; then
+                echo ""
+                echo -e "   ${YELLOW}${BOLD}⚠️  LARGE PACKAGE DETECTED (${PROBE_SIZE_STR}):${NC}"
+                echo -e "   ${YELLOW}GitHub strictly limits git files to ${BOLD}100 MB${NC}${YELLOW}. Large binaries cannot be stored directly in Git.${NC}"
+                echo -e "   ${GREEN}${BOLD}⚡ Package exceeds 100 MB — Remote Rollout Mode activated!${NC}"
+                echo -e "   ${CYAN}🚀 Skipping full download: Directly proceeding to wrapper package configuration!${NC}"
+                echo ""
+
+                remote_size="$PROBE_SIZE_BYTES"
+                is_remote_pkg="true"
+                input_file="${PROBE_FILENAME}"
+                while [ -z "$input_file" ]; do
+                    read -p "📁 Enter package filename with extension (e.g. app.deb): " input_file
+                    input_file=$(echo "$input_file" | xargs)
+                done
+            elif [ "$PROBE_SIZE_BYTES" -gt 0 ]; then
+                echo ""
+                echo -e "   ${CYAN}📦 Package size is within GitHub limit (${PROBE_SIZE_STR} <= 100 MB).${NC}"
+                read -p "   Host as Remote Package without downloading, or Download to Git? [R=remote (no download)/d=download]: " dl_choice
+                if [[ "$dl_choice" =~ ^[dD] ]]; then
+                    should_download="true"
+                else
+                    remote_size="$PROBE_SIZE_BYTES"
+                    is_remote_pkg="true"
+                    input_file="${PROBE_FILENAME:-remote_pkg.deb}"
+                fi
+            else
+                echo ""
+                echo -e "   ${YELLOW}ℹ️  Remote file size could not be determined automatically.${NC}"
+                read -p "   Is this package larger than 100 MB? [Y/n]: " is_large_prompt
+                is_large_prompt=${is_large_prompt:-Y}
+                if [[ "$is_large_prompt" =~ ^[Yy] ]]; then
+                    echo -e "   ${GREEN}${BOLD}⚡ Remote Rollout Mode activated! Skipping download.${NC}"
+                    is_remote_pkg="true"
+                    input_file="${PROBE_FILENAME}"
+                    while [ -z "$input_file" ]; do
+                        read -p "📁 Enter package filename with extension (e.g. app.deb): " input_file
+                        input_file=$(echo "$input_file" | xargs)
+                    done
+                else
+                    should_download="true"
                 fi
             fi
-            local tmp_fetch
-            tmp_fetch=$(mktemp /tmp/remote_pkg_XXXXXX)
-            echo -e "   ${BLUE}⏳ Fetching package from remote host to analyze metadata...${NC}"
-            if python3 "$SCRIPT_DIR/scripts/downloader.py" "$remote_url" -o "$tmp_fetch"; then
-                input_file="$tmp_fetch"
-            else
-                echo -e "${RED}   Failed to fetch package from '$remote_url'. Check URL, network, or permissions.${NC}"
-                input_file=""
-                remote_url=""
-                continue
+
+            if [ "$should_download" = "true" ]; then
+                local tmp_fetch
+                tmp_fetch=$(mktemp /tmp/remote_pkg_XXXXXX)
+                echo -e "   ${BLUE}⏳ Fetching package from remote host...${NC}"
+                if python3 "$SCRIPT_DIR/scripts/downloader.py" "$remote_url" -o "$tmp_fetch"; then
+                    input_file="$tmp_fetch"
+                else
+                    echo -e "${RED}   Failed to fetch package from '$remote_url'. Check URL, network, or permissions.${NC}"
+                    input_file=""
+                    remote_url=""
+                    continue
+                fi
             fi
         elif [ ! -f "$input_file" ]; then
             echo -e "${RED}   File '$input_file' not found! Please enter a valid path.${NC}"
@@ -1076,7 +1177,7 @@ print(", ".join(norm))
     case "$ext" in
         deb)
             detected_os="debian"
-            if command -v dpkg-deb >/dev/null 2>&1; then
+            if [ -f "$input_file" ] && command -v dpkg-deb >/dev/null 2>&1; then
                 detected_name=$(dpkg-deb -f "$input_file" Package 2>/dev/null || echo "")
                 detected_ver=$(dpkg-deb -f "$input_file" Version 2>/dev/null || echo "")
                 detected_desc=$(dpkg-deb -f "$input_file" Description 2>/dev/null | head -n 1 || echo "")
@@ -1084,7 +1185,7 @@ print(", ".join(norm))
             ;;
         rpm)
             detected_os="fedora"
-            if command -v rpm >/dev/null 2>&1; then
+            if [ -f "$input_file" ] && command -v rpm >/dev/null 2>&1; then
                 detected_name=$(rpm -qp --qf "%{NAME}" "$input_file" 2>/dev/null || echo "")
                 detected_ver=$(rpm -qp --qf "%{VERSION}" "$input_file" 2>/dev/null || echo "")
                 detected_desc=$(rpm -qp --qf "%{SUMMARY}" "$input_file" 2>/dev/null || echo "")
@@ -1101,7 +1202,12 @@ print(", ".join(norm))
     esac
 
     # Filename fallback for name & version
-    local file_name_guess=$(echo "$base_fname" | cut -d_ -f1 | cut -d- -f1)
+    local file_name_guess=""
+    if [[ "$base_fname" == *"_"* ]]; then
+        file_name_guess=$(echo "$base_fname" | cut -d_ -f1)
+    else
+        file_name_guess=$(echo "$base_fname" | cut -d- -f1)
+    fi
     local file_ver_guess=$(echo "$base_fname" | grep -oP '(?<=_)[0-9]+(\.[0-9]+)+([a-zA-Z0-9.-]*)' | head -n 1 || echo "")
 
     local default_name="${detected_name:-$file_name_guess}"
@@ -1194,8 +1300,15 @@ print(", ".join(norm))
     read -p "📝 Step 5/5: Enter short description [$default_desc]: " pkg_desc
     pkg_desc="${pkg_desc:-$default_desc}"
 
+    local remote_sha256=""
+    if [ "$is_remote_pkg" = "true" ] || [ -n "$remote_url" ]; then
+        echo ""
+        read -p "🔐 Enter SHA256 checksum for verification (optional, press Enter to skip): " remote_sha256
+        remote_sha256=$(echo "$remote_sha256" | xargs)
+    fi
+
     echo ""
-    process_upload "$input_file" "$pkg_name" "$pkg_version" "$os_type" "$pkg_desc" "false" "$remote_url"
+    process_upload "$input_file" "$pkg_name" "$pkg_version" "$os_type" "$pkg_desc" "false" "$remote_url" "$remote_size" "$remote_sha256"
 }
 
 # CLI Argument parsing
@@ -1274,22 +1387,41 @@ done
 
 # If arguments were provided via flags, execute direct upload
 if [ -n "$CLI_FILE" ] && [ -n "$CLI_NAME" ] && [ -n "$CLI_VER" ] && [ -n "$CLI_OS" ]; then
+    local cli_remote_size=0
     # Check if CLI_FILE is a remote URL
     if [[ "$CLI_FILE" =~ ^https?:// ]] || [[ "$CLI_FILE" =~ ^mega\.(nz|co\.nz) ]] || [[ "$CLI_FILE" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+ ]]; then
         if [ -z "$CLI_REMOTE_URL" ]; then
             CLI_REMOTE_URL="$CLI_FILE"
         fi
         echo -e "${BLUE}🌐 Remote package URL provided via CLI: ${BOLD}$CLI_FILE${NC}"
-        tmp_cli_fetch=$(mktemp /tmp/remote_pkg_XXXXXX)
-        echo -e "${BLUE}⏳ Downloading package to inspect and index metadata...${NC}"
-        if python3 "$SCRIPT_DIR/scripts/downloader.py" "$CLI_FILE" -o "$tmp_cli_fetch"; then
-            CLI_FILE="$tmp_cli_fetch"
+        
+        # Probe remote metadata first
+        PROBE_PROVIDER="Unknown"
+        PROBE_FILENAME=""
+        PROBE_SIZE_BYTES=0
+        PROBE_SIZE_STR="Unknown"
+        PROBE_IS_LARGE="false"
+
+        if [ -f "$SCRIPT_DIR/scripts/downloader.py" ]; then
+            eval "$(python3 "$SCRIPT_DIR/scripts/downloader.py" --probe-env "$CLI_FILE" 2>/dev/null || echo '')"
+        fi
+
+        if [ "$PROBE_IS_LARGE" = "true" ] || [ "$PROBE_SIZE_BYTES" -gt $((100 * 1024 * 1024)) ]; then
+            echo -e "${YELLOW}⚠️  Package exceeds 100 MB (${PROBE_SIZE_STR}). Skipping download — deploying remote wrapper.${NC}"
+            CLI_FILE="${PROBE_FILENAME:-${CLI_NAME}_${CLI_VER}.deb}"
+            cli_remote_size="$PROBE_SIZE_BYTES"
         else
-            echo -e "${RED}❌ Failed to fetch remote package: $CLI_FILE${NC}"
-            exit 1
+            tmp_cli_fetch=$(mktemp /tmp/remote_pkg_XXXXXX)
+            echo -e "${BLUE}⏳ Downloading package to inspect and index metadata...${NC}"
+            if python3 "$SCRIPT_DIR/scripts/downloader.py" "$CLI_FILE" -o "$tmp_cli_fetch"; then
+                CLI_FILE="$tmp_cli_fetch"
+            else
+                echo -e "${RED}❌ Failed to fetch remote package: $CLI_FILE${NC}"
+                exit 1
+            fi
         fi
     fi
-    process_upload "$CLI_FILE" "$CLI_NAME" "$CLI_VER" "$CLI_OS" "$CLI_DESC" "$CLI_FORCE" "$CLI_REMOTE_URL"
+    process_upload "$CLI_FILE" "$CLI_NAME" "$CLI_VER" "$CLI_OS" "$CLI_DESC" "$CLI_FORCE" "$CLI_REMOTE_URL" "$cli_remote_size"
 else
     echo -e "${RED}Missing required parameters for CLI upload.${NC}"
     echo "Usage: ./upload.sh -f <file|url> -n <name> -v <version> -o <debian|fedora|arch|universal> [-m <remote_url>]"

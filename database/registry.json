@@ -32,27 +32,6 @@
       "updated_at": "2026-10-10T09:27:41.468954+00:00",
       "is_remote": false,
       "control_info": "Package: kali-login-wallpaper\nVersion: 1.0.1\nSection: admin\nPriority: optional\nArchitecture: all\nDepends: python3, python3-gi, gir1.2-gtk-4.0, python3-pil, librsvg2-bin\nMaintainer: Bsilent\nDescription: Kali Linux GDM login wallpaper changer\n GTK4 utility to select, crop, apply and restore the Kali Linux GDM login background.\n"
-    },
-    {
-      "name": "burpsuite-pro",
-      "version": "2026.4.0.0-1",
-      "os_type": "debian",
-      "filename": "burpsuite-pro_2026.4.0.0-1.deb",
-      "filepath": "database/debian/burpsuite-pro_2026.4.0.0-1.deb",
-      "sha256": "22b123bee488f4dd187928a1162374aaa3413cadc38ee5be771218bb9c6df224",
-      "size": 20928,
-      "md5": "f1f3d46901a06321af4ab292565df253",
-      "sha1": "7cdbf176714156e5757d115df2014ba4e64131e5",
-      "description": "burpsuite-pro package for Linux",
-      "updated_at": "2026-10-10T09:28:37.609281+00:00",
-      "is_remote": true,
-      "remote_url": "https://drive.google.com/file/d/1d1erCEzsCfidqVH1Zhcyn5KHLUiOSNvn/view?usp=drive_link",
-      "original_size": 678428672,
-      "original_sha256": "",
-      "remote_mirrors": [
-        "https://drive.google.com/file/d/1d1erCEzsCfidqVH1Zhcyn5KHLUiOSNvn/view?usp=drive_link"
-      ],
-      "control_info": "Package: burpsuite-pro\nVersion: 2026.4.0.0-1\nSection: utils\nPriority: optional\nArchitecture: amd64\nMaintainer: Repository Maintainer\nDescription: burpsuite-pro package for Linux\nPre-Depends: python3, curl | wget, ca-certificates\nRecommends: openssl\n"
     }
   ]
 }

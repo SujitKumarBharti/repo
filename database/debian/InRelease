@@ -8,17 +8,17 @@ Codename: stable
 Version: 1.0
 Components: main
 Architectures: amd64 arm64 all
-Date: Sat, 10 Oct 2026 09:28:37 UTC
+Date: Sat, 10 Oct 2026 09:29:26 UTC
 MD5Sum:
- 704a723b208dc565fe2ddebc64cb66a8 1558 Packages
- 4f7632bc18eebffda9e6050a9e1d1c25 867 Packages.gz
+ 82e820d3cfd7bed0d4c3063e5412544c 1092 Packages
+ f1810da7c9b5366a70dd5639c7276aed 666 Packages.gz
 SHA256:
- 118097bd5040a5e9767c36c3afd4a72a58f29af5c7bdc6de599188a1c7b29e8a 1558 Packages
- 348fc72db08535940fee36e4576cd5ffef0f1a6e3a6c605919ca0f17f8720e6d 867 Packages.gz
+ 23d06b7d7f5b04bb7315007f3bad1a0168afee42e873b00ebb7b46712af80413 1092 Packages
+ 270fa354afbff753fa04211b8803da9606776aeab50d160bfe5c39edbb369ecb 666 Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iHUEARYKAB0WIQQVz56uY+3h35z5cvCwSFe3yb5WbgUCasoFRQAKCRCwSFe3yb5W
-bsBxAP0WiSvb/01tYTbjYZoVPWhT+qJdjJ78wNJ+SYonjuQjywEA9Q1uQxgOd9RZ
-Jo4o10aAoekb0/HztRQUGM6EGvhbTgE=
-=ww1I
+iHUEARYKAB0WIQQVz56uY+3h35z5cvCwSFe3yb5WbgUCasoFdgAKCRCwSFe3yb5W
+bhr8AP9hmOCTgwQLPv02p2Z4K2PsM54Q78BIvbcpO4Xm+RYZoAEAzDzHJaJzZ8w1
+ZJ6BCV7Q/Xm5jdjqQ3SVda+B8jNxpg8=
+=mhch
 -----END PGP SIGNATURE-----

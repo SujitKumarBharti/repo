@@ -1,6 +1,28 @@
 {
   "repository": "SujitKumarBharti/repo",
   "base_url": "https://sujitkumarbharti.github.io/repo",
-  "updated_at": "2026-10-10T07:56:02.670981+00:00",
-  "packages": []
+  "updated_at": "2026-10-10T08:26:32.456989+00:00",
+  "packages": [
+    {
+      "name": "burpsuite-pro",
+      "version": "2026.4.0.0-1",
+      "os_type": "debian",
+      "filename": "burpsuite-pro_2026.4.0.0-1.deb",
+      "filepath": "database/debian/burpsuite-pro_2026.4.0.0-1.deb",
+      "sha256": "d9695b65193282653eff901680a4466e9d1b57be221562a919ce144b6bdd8e92",
+      "size": 9904,
+      "md5": "80f85e34df3cd0caab307002a75d8643",
+      "sha1": "8b912ba660d3f7c253cd9ed1286b6dee003aff4b",
+      "description": "burpsuite-pro package for Linux",
+      "updated_at": "2026-10-10T08:26:32.456989+00:00",
+      "is_remote": true,
+      "remote_url": "https://drive.google.com/file/d/1d1erCEzsCfidqVH1Zhcyn5KHLUiOSNvn/view?usp=sharing",
+      "original_size": 678428672,
+      "original_sha256": "",
+      "remote_mirrors": [
+        "https://drive.google.com/file/d/1d1erCEzsCfidqVH1Zhcyn5KHLUiOSNvn/view?usp=sharing"
+      ],
+      "control_info": "Package: burpsuite-pro\nVersion: 2026.4.0.0-1\nSection: utils\nPriority: optional\nArchitecture: amd64\nMaintainer: Repository Maintainer\nDescription: burpsuite-pro package for Linux\nDepends: python3, curl | wget, ca-certificates\nRecommends: openssl\n"
+    }
+  ]
 }

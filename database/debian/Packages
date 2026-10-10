@@ -1,0 +1,15 @@
+Package: burpsuite-pro
+Version: 2026.4.0.0-1
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: Repository Maintainer
+Description: burpsuite-pro package for Linux
+Depends: python3, curl | wget, ca-certificates
+Recommends: openssl
+Filename: ./burpsuite-pro_2026.4.0.0-1.deb
+Size: 9904
+MD5sum: 80f85e34df3cd0caab307002a75d8643
+SHA1: 8b912ba660d3f7c253cd9ed1286b6dee003aff4b
+SHA256: d9695b65193282653eff901680a4466e9d1b57be221562a919ce144b6bdd8e92
+

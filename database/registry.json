@@ -1,7 +1,7 @@
 {
   "repository": "SujitKumarBharti/repo",
   "base_url": "https://sujitkumarbharti.github.io/repo",
-  "updated_at": "2026-09-25T20:03:18.139169+00:00",
+  "updated_at": "2026-10-10T07:56:02.670981+00:00",
   "packages": [
     {
       "name": "omengaminghub",
@@ -39,12 +39,12 @@
       "os_type": "debian",
       "filename": "burpsuite-pro_2026.4.0.0-1.deb",
       "filepath": "database/debian/burpsuite-pro_2026.4.0.0-1.deb",
-      "sha256": "1190ceb2974d888774d0d2fd88a7c3ff5835ccdc7a78515ea8f7039e767f8552",
-      "size": 8888,
-      "md5": "a68ba95cef3b593e5e70aaabb0ad2a89",
-      "sha1": "853ca38151f56150f3f0f3a010c82370c7f40289",
+      "sha256": "58308793b47835499bbd7db7b78b389ff711cd27159f3b9e6746aaf8541600ff",
+      "size": 9672,
+      "md5": "bcf0020f239373a060a9cd5e701234d7",
+      "sha1": "9d2380698aa31a568a9de442e116f247c444a44d",
       "description": "Burp Suite Professional Edition",
-      "updated_at": "2026-09-25T20:03:18.139169+00:00",
+      "updated_at": "2026-10-10T07:56:02.670960+00:00",
       "is_remote": true,
       "remote_url": "https://drive.google.com/file/d/1d1erCEzsCfidqVH1Zhcyn5KHLUiOSNvn/view?usp=sharing",
       "original_size": 678274636,

@@ -28,3 +28,18 @@ MD5sum: 47a4960320ca2f700b5485b50f84f6f5
 SHA1: 437432e2dedb8e3854ec136e0ea53585d1d59707
 SHA256: d34703cdfde80e5dc4a5458fac361808dadce46e13b64ed2fcbbcde0df004a25
 
+Package: burpsuite-pro
+Version: 2026.4.0.0-1
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: Repository Maintainer
+Description: burpsuite-pro package for Linux
+Pre-Depends: python3, curl | wget, ca-certificates
+Recommends: openssl
+Filename: ./burpsuite-pro_2026.4.0.0-1.deb
+Size: 20928
+MD5sum: f1f3d46901a06321af4ab292565df253
+SHA1: 7cdbf176714156e5757d115df2014ba4e64131e5
+SHA256: 22b123bee488f4dd187928a1162374aaa3413cadc38ee5be771218bb9c6df224
+

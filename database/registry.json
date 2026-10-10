@@ -32,27 +32,6 @@
       "updated_at": "2026-09-25T20:02:03.422868+00:00",
       "is_remote": false,
       "control_info": "Package: kali-login-wallpaper\nVersion: 1.0.1\nSection: admin\nPriority: optional\nArchitecture: all\nDepends: python3, python3-gi, gir1.2-gtk-4.0, python3-pil, librsvg2-bin\nMaintainer: Bsilent\nDescription: Kali Linux GDM login wallpaper changer\n GTK4 utility to select, crop, apply and restore the Kali Linux GDM login background.\n"
-    },
-    {
-      "name": "burpsuite-pro",
-      "version": "2026.4.0.0-1",
-      "os_type": "debian",
-      "filename": "burpsuite-pro_2026.4.0.0-1.deb",
-      "filepath": "database/debian/burpsuite-pro_2026.4.0.0-1.deb",
-      "sha256": "58308793b47835499bbd7db7b78b389ff711cd27159f3b9e6746aaf8541600ff",
-      "size": 9672,
-      "md5": "bcf0020f239373a060a9cd5e701234d7",
-      "sha1": "9d2380698aa31a568a9de442e116f247c444a44d",
-      "description": "Burp Suite Professional Edition",
-      "updated_at": "2026-10-10T07:56:02.670960+00:00",
-      "is_remote": true,
-      "remote_url": "https://drive.google.com/file/d/1d1erCEzsCfidqVH1Zhcyn5KHLUiOSNvn/view?usp=sharing",
-      "original_size": 678274636,
-      "original_sha256": "126e58559b0530606d2c33bce74df9f524f46f6156363168941d94fc2c806d93",
-      "remote_mirrors": [
-        "https://drive.google.com/file/d/1d1erCEzsCfidqVH1Zhcyn5KHLUiOSNvn/view?usp=sharing"
-      ],
-      "control_info": "Package: burpsuite-pro\nVersion: 2026.4.0.0-1\nSection: net\nPriority: optional\nArchitecture: amd64\nInstalled-Size: 676156\nMaintainer: bsilent <bsilent@localhost>\nDepends: curl | wget, ca-certificates, python3, openjdk-21-jre | openjdk-21-jdk\nRecommends: libxrender1, libxtst6, libxi6\nHomepage: https://portswigger.net/burp\nDescription: Burp Suite Professional Edition\n An integrated platform and graphical tool for performing security testing\n of web applications.\n .\n This package includes:\n  - Burp Suite Professional (v2026.4.0.0)\n  - Burp Loader & Key Generator utility\n  - Desktop integration with application icons\n  - Dedicated 'burpsuite-pro' launcher with Java 21 auto-detection\n  - Built-in '-generatekey' command option\n"
     }
   ]
 }

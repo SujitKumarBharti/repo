@@ -55,3 +55,23 @@ MD5sum: 9106ebc8200dd027d01681e148069802
 SHA1: d717cb6e78f977e4750e9ff401c2914700d46b35
 SHA256: 144c40e4392f0f71230b625a83d2544b8ae47662a930da1bf340608e8d64ab71
 
+Package: figcraft
+Version: 0.5.1-1
+Section: graphics
+Priority: optional
+Architecture: amd64
+Maintainer: FigCraft maintainers <figcraft@storyteller.ai>
+Installed-Size: 172350
+Depends: libc6 (>= 2.35), libgcc-s1, libxkbcommon0, libxkbcommon-x11-0, libwayland-client0, libx11-6, libx11-xcb1, libxcb1, libxcursor1, libxi6, libvulkan1 | libegl1
+Recommends: mesa-vulkan-drivers, libegl-mesa0, xdg-desktop-portal
+Homepage: https://getartcraft.com/apps/figcraft
+Description: Open-source, native interface design and prototyping tool.
+ Frames, vector shapes and text on an infinite canvas; auto layout and
+ constraints; components, variants, styles and variables; interactive
+ prototypes with a presentation mode; SVG and PNG export; GPU rendering (wgpu).
+Filename: ./figcraft_0.5.1-1.deb
+Size: 86398736
+MD5sum: 146ce6aa9277ccf046b79b457662ed8b
+SHA1: f7655b59e3c621f92621a4c5a483c7b02a4126a7
+SHA256: 2dd0b7c6d8ddda3e2c52124f93f61dab8755b3b1777041210d1763bf0ea474e8
+

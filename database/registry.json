@@ -1,7 +1,7 @@
 {
   "repository": "SujitKumarBharti/repo",
   "base_url": "https://sujitkumarbharti.github.io/repo",
-  "updated_at": "2026-10-17T08:29:14.048016+00:00",
+  "updated_at": "2026-10-17T08:41:45.992519+00:00",
   "packages": [
     {
       "name": "omengaminghub",
@@ -53,6 +53,21 @@
         "https://drive.google.com/file/d/1d1erCEzsCfidqVH1Zhcyn5KHLUiOSNvn/view?usp=drive_link"
       ],
       "control_info": "Package: burpsuite-pro\nVersion: 2026.4.0.0-1\nSection: net\nPriority: optional\nArchitecture: amd64\nInstalled-Size: 676156\nMaintainer: bsilent <bsilent@localhost>\nDepends: openjdk-21-jre | openjdk-21-jdk\nRecommends: libxrender1, libxtst6, libxi6\nHomepage: https://portswigger.net/burp\nDescription: Burp Suite Professional Edition\n An integrated platform and graphical tool for performing security testing\n of web applications.\n .\n This package includes:\n  - Burp Suite Professional (v2026.4.0.0)\n  - Burp Loader & Key Generator utility\n  - Desktop integration with application icons\n  - Dedicated 'burpsuite-pro' launcher with Java 21 auto-detection\n  - Built-in '-generatekey' command option\nPre-Depends: python3, curl | wget, ca-certificates\n"
+    },
+    {
+      "name": "figcraft",
+      "version": "0.5.1-1",
+      "os_type": "debian",
+      "filename": "figcraft_0.5.1-1.deb",
+      "filepath": "database/debian/figcraft_0.5.1-1.deb",
+      "sha256": "2dd0b7c6d8ddda3e2c52124f93f61dab8755b3b1777041210d1763bf0ea474e8",
+      "size": 86398736,
+      "md5": "146ce6aa9277ccf046b79b457662ed8b",
+      "sha1": "f7655b59e3c621f92621a4c5a483c7b02a4126a7",
+      "description": "Open-source, native interface design and prototyping tool.",
+      "updated_at": "2026-10-17T08:41:45.992519+00:00",
+      "is_remote": false,
+      "control_info": "Package: figcraft\nVersion: 0.5.1-1\nSection: graphics\nPriority: optional\nArchitecture: amd64\nMaintainer: FigCraft maintainers <figcraft@storyteller.ai>\nInstalled-Size: 172350\nDepends: libc6 (>= 2.35), libgcc-s1, libxkbcommon0, libxkbcommon-x11-0, libwayland-client0, libx11-6, libx11-xcb1, libxcb1, libxcursor1, libxi6, libvulkan1 | libegl1\nRecommends: mesa-vulkan-drivers, libegl-mesa0, xdg-desktop-portal\nHomepage: https://getartcraft.com/apps/figcraft\nDescription: Open-source, native interface design and prototyping tool.\n Frames, vector shapes and text on an infinite canvas; auto layout and\n constraints; components, variants, styles and variables; interactive\n prototypes with a presentation mode; SVG and PNG export; GPU rendering (wgpu).\n"
     }
   ]
 }

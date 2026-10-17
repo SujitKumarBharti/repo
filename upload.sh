@@ -1058,10 +1058,37 @@ print(sha256)
     echo ""
     echo -e "${BLUE}📦 Automatically staging, committing, and pushing to GitHub...${NC}"
     git config advice.updateSparsePath false 2>/dev/null || true
+    git config http.version HTTP/1.1 2>/dev/null || true
+    git config http.postBuffer 524288000 2>/dev/null || true
+    git config http.lowSpeedLimit 0 2>/dev/null || true
+    git config http.lowSpeedTime 999999 2>/dev/null || true
+
     git add --sparse database/
     git commit -m "feat: roll out $pkg_name v$pkg_version for $os_type" || true
     echo -e "${BLUE}🚀 Pushing package to GitHub...${NC}"
-    if git push; then
+
+    local push_success="false"
+    local max_push_retries=3
+    local attempt=1
+
+    while [ $attempt -le $max_push_retries ]; do
+        if [ $attempt -gt 1 ]; then
+            echo -e "${BLUE}🔄 Retrying push to GitHub (Attempt $attempt of $max_push_retries)...${NC}"
+        fi
+        if git push; then
+            push_success="true"
+            break
+        else
+            echo -e "${YELLOW}⚠️ Push attempt $attempt timed out or interrupted.${NC}"
+            if [ $attempt -lt $max_push_retries ]; then
+                echo -e "${CYAN}⏳ Retrying in 2 seconds...${NC}"
+                sleep 2
+            fi
+        fi
+        attempt=$((attempt + 1))
+    done
+
+    if [ "$push_success" == "true" ]; then
         echo -e "${BLUE}🧹 Automatically cleaning local binary to free disk space...${NC}"
         git sparse-checkout set --no-cone '/*' '!database/*/*.deb' '!database/*/*.rpm' '!database/*/*.pkg.tar.zst' '!database/*/*.run' '!database/*/*.AppImage' 2>/dev/null || true
         echo ""
@@ -1070,7 +1097,7 @@ print(sha256)
         echo -e "${GREEN}${BOLD}🧹 Local disk space cleaned: 0 MB wasted locally!${NC}"
         echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${NC}"
     else
-        echo -e "${YELLOW}⚠️ Git push was not completed. You can push manually with: ${CYAN}git push${NC}"
+        echo -e "${YELLOW}⚠️ Git push was not completed after $max_push_retries attempts. You can push manually with: ${CYAN}git push${NC}"
     fi
     echo ""
 }
